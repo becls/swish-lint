@@ -1,0 +1,11 @@
+*.mo
+*.so
+*.sop
+*.ss.html
+*.wpo
+*~
+swish-lint
+swish-lint.boot
+swish-lint.exe
+git.revision
+static-keywords

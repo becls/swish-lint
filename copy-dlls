@@ -1,0 +1,76 @@
+#!/usr/bin/env swish
+
+;;; Copyright 2020 Beckman Coulter, Inc.
+;;;
+;;; Permission is hereby granted, free of charge, to any person
+;;; obtaining a copy of this software and associated documentation
+;;; files (the "Software"), to deal in the Software without
+;;; restriction, including without limitation the rights to use, copy,
+;;; modify, merge, publish, distribute, sublicense, and/or sell copies
+;;; of the Software, and to permit persons to whom the Software is
+;;; furnished to do so, subject to the following conditions:
+;;;
+;;; The above copyright notice and this permission notice shall be
+;;; included in all copies or substantial portions of the Software.
+;;;
+;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+;;; EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+;;; MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+;;; NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+;;; HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+;;; WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;;; DEALINGS IN THE SOFTWARE.
+
+(define cli
+  (cli-specs
+   default-help
+   [scheme -s (string "<path>") "the path to Chez Scheme's binary directory"
+    (usage req)]))
+
+(define opt (parse-command-line-arguments cli))
+
+(when (opt 'help)
+  (display-help (app:name) cli (opt))
+  (exit 0))
+
+(unless (memq (machine-type) '(a6nt i3nt))
+  (exit 0))
+
+(unless (opt 'scheme)
+  (errorf #f "-s <path> is required"))
+
+(define (ctime fn)
+  (match (get-stat fn)
+    [`(<stat> [ctime (,sec . ,nsec)]) (make-time 'time-duration nsec sec)]
+    [,_ #f]))
+
+(define (copy-file in out)
+  (and (file-exists? in)
+       (let* ([bv (read-file in)]
+              [op (open-file out (+ O_WRONLY O_CREAT O_TRUNC) #o777 'binary-output)])
+         (on-exit (close-port op)
+           (put-bytevector op bv))
+         #t)))
+
+(define (maybe-copy-file src-dir fn)
+  (let ([in (path-combine src-dir fn)]
+        [out fn])
+    (and (file-exists? in)
+         (let ([in-time (ctime in)]
+               [out-time (ctime out)])
+           (and (or (not out-time) (time>? in-time out-time))
+                (copy-file in out))))))
+
+(define swish-libdir (path-parent (osi_get_executable_path)))
+
+(define csvNNN.dll
+  (format "csv~{~a~}.dll"
+    (call-with-values scheme-version-number list)))
+
+(for-each
+ (lambda (fn) (maybe-copy-file swish-libdir fn))
+ '("uv.dll" "sqlite3.dll" "osi.dll"))
+
+(or (maybe-copy-file swish-libdir csvNNN.dll)
+    (maybe-copy-file (opt 'scheme) csvNNN.dll))
