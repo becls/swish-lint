@@ -110,7 +110,7 @@
            [else (lp type value bfp efp)])))))
 
   (define (walk-annotations x proc)
-    (let ([seen '()])
+    (let ([seen (make-eq-hashtable)])
       (let walk ([x x])
         (cond
          [(pair? x)
@@ -120,10 +120,11 @@
           (do ([i 0 (+ i 1)]) ((= i (vector-length x)))
             (walk (vector-ref x i)))]
          [(annotation? x)
-          (unless (memq x seen)
-            (set! seen (cons x seen))
-            (proc x)
-            (walk (annotation-expression x)))]))))
+          (let ([cell (eq-hashtable-cell seen x #f)])
+            (unless (cdr cell)
+              (set-cdr! cell #t)
+              (proc x)
+              (walk (annotation-expression x))))]))))
 
   (define identifier "[:*A-Za-z0-9~&!?\\/<=>^%&$@_.-]+")
 
