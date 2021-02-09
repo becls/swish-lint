@@ -116,6 +116,9 @@
          [(pair? x)
           (walk (car x))
           (walk (cdr x))]
+         [(vector? x)
+          (do ([i 0 (+ i 1)]) ((= i (vector-length x)))
+            (walk (vector-ref x i)))]
          [(annotation? x)
           (unless (memq x seen)
             (set! seen (cons x seen))
