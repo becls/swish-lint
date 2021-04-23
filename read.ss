@@ -126,7 +126,7 @@
               (proc x)
               (walk (annotation-expression x))))]))))
 
-  (define identifier "[:*A-Za-z0-9~&!?\\/<=>^%&$@_.-]+")
+  (define identifier "[:*+A-Za-z0-9~&!?\\/<=>^%$@_.-]+")
 
   (define defn-exprs
     '("define\\s+\\(?"
