@@ -149,22 +149,20 @@
         [,_ (void)])))
 
   (define (walk-defns annotated-code table proc)
-    (define defun-kwds
-      ;; Allow (keyword (name . ,_) . ,_)
-      (list 'define
-        'define-syntax
-        'trace-define
-        'trace-define-syntax
-        ))
-    (define def-kwds
-      ;; Allow (keyword name . ,_)
-      (append defun-kwds
-        (list 'define-record
-          'define-record-type
-          'define-state-record
-          'define-tuple
-          'set!
-          )))
+    (define defun-match-regexp
+      (re "^(?:trace-)?define(?:-[\\S]+)?"))
+    (define def-match-regexp
+      (re "^(?:trace-)?define(?:-[\\S]+)?|^set(?:-who)?!"))
+    (define local-keywords (make-eq-hashtable))
+    (define (keyword? keyword mre)
+      (and (symbol? keyword)
+           (or (eq-hashtable-ref local-keywords keyword #f)
+               (let ([str (symbol->string keyword)])
+                 (match (pregexp-match mre str)
+                   [#f #f]
+                   [,_
+                    (eq-hashtable-set! local-keywords keyword #t)
+                    #t])))))
     (define (guarded name name.anno)
       (cond
        [(not (symbol? name)) (void)]
@@ -176,11 +174,21 @@
           [`(annotation [stripped (,keyword (,name . ,_) . ,_)]
               [expression
                (,_ `(annotation [expression (,name.anno . ,_)]) . ,_)])
-           (guard (memq keyword defun-kwds))
+           (guard (keyword? keyword defun-match-regexp))
            (guarded name name.anno)]
           [`(annotation [stripped (,keyword ,name . ,_)]
               [expression (,_ ,name.anno . ,_)])
-           (guard (memq keyword def-kwds))
+           (guard (keyword? keyword def-match-regexp))
+           (guarded name name.anno)]
+          [`(annotation [stripped (meta ,keyword (,name . ,_) . ,_)]
+              [expression
+               (,_ ,_ `(annotation [expression (,name.anno . ,_)]) . ,_)])
+           (guard (keyword? keyword defun-match-regexp))
+           (guarded name name.anno)]
+          [`(annotation [stripped (meta ,keyword ,name . ,_)]
+              [expression (,_ ,_ ,name.anno . ,_)])
+           ;; Use defun here because set! is not valid with meta.
+           (guard (keyword? keyword defun-match-regexp))
            (guarded name name.anno)]
           [,_ (void)]))))
 
