@@ -129,9 +129,8 @@
   (define identifier "[:*+A-Za-z0-9~&!?\\/<=>^%$@_.-]+")
 
   (define defn-exprs
-    '("define\\s+\\(?"
-      "define-syntax\\s+\\(?"
-      "set!\\s+"))
+    '("(?:meta\\s+)?(?:trace-)?define(?:-[\\S]+|\\s)?\\s+\\(?"
+      "set(?:-who)?!\\s+"))
 
   (define defn-regexp
     ;; leading paren
