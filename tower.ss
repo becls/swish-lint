@@ -114,7 +114,6 @@ order by D.line asc"
 select D.filename,D.line,D.char from refs D
 where D.name=?
   and D.root_fk=?
-  and json_extract(D.meta, '$.anno-pass')=1
 order by substr(D.filename,-3)='.ss' desc, D.filename asc, D.line asc"
       name root-fk))
 
@@ -338,7 +337,6 @@ order by B.rank desc, B.count desc, A.name asc"
                     (coerce filename)
                     (coerce (json:get ref 'name))
                     (coerce (and (= (json:ref meta 'definition 0) 1)
-                                 (= (json:ref meta 'anno-pass 0) 1)
                                  "defn"))
                     (coerce (json:get ref 'line))
                     (coerce (json:get ref 'char))

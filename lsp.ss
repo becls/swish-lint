@@ -299,40 +299,21 @@
           [refs (make-hashtable string-hash string=?)])
       (define (key name line char)
         (format "~a:~a:~a" name line char))
-      (match
-       (try
-        (walk-defns-re text source-table
-          (lambda (table name source)
-            (let-values ([(line char) (fp->line/char table (car source))])
-              (let ([new (json:make-object
-                          [name name]
-                          [line line]
-                          [char char]
-                          [meta (json:make-object
-                                 [definition 1]
-                                 [regexp-pass 1])])])
-                (hashtable-update! refs (key name line char)
-                  (lambda (old)
-                    (if old
-                        (json:merge old new)
-                        new))
-                  #f))))))
-       [`(catch ,reason)
-        (trace-expr `(walk-defns-re => ,(exit-reason->english reason)))]
-       [,_ (void)])
-      (when annotated-code
+      (define (get-name name)
+        (if (symbol? name)
+            (symbol->string name)
+            name))
+      (define (try-walk who walk code get-bfp meta)
         (match
          (try
-          (walk-defns annotated-code source-table
+          (walk code source-table
             (lambda (table name source)
-              (let-values ([(line char) (fp->line/char table (source-object-bfp source))])
+              (let-values ([(line char) (fp->line/char table (get-bfp source))])
                 (let ([new (json:make-object
-                            [name (symbol->string name)]
+                            [name (get-name name)]
                             [line line]
                             [char char]
-                            [meta (json:make-object
-                                   [definition 1]
-                                   [anno-pass 1])])])
+                            [meta meta])])
                   (hashtable-update! refs (key name line char)
                     (lambda (old)
                       (if old
@@ -340,49 +321,31 @@
                           new))
                     #f))))))
          [`(catch ,reason)
-          (trace-expr `(walk-defns => ,(exit-reason->english reason)))]
-         [,_ (void)]))
-      (match
-       (try
-        (walk-refs-re text source-table
-          (lambda (table name source)
-            (let-values ([(line char) (fp->line/char table (car source))])
-              (let ([new (json:make-object
-                          [name name]
-                          [line line]
-                          [char char]
-                          [meta (json:make-object
-                                 [regexp-pass 1])])])
-                (hashtable-update! refs (key name line char)
-                  (lambda (old)
-                    (if old
-                        (json:merge old new)
-                        new))
-                  #f))))))
-       [`(catch ,reason)
-        (trace-expr `(walk-refs-re => ,(exit-reason->english reason)))]
-       [,_ (void)])
-      (when annotated-code
-        (match
-         (try
-          (walk-refs annotated-code source-table
-            (lambda (table name source)
-              (let-values ([(line char) (fp->line/char table (source-object-bfp source))])
-                (let ([new (json:make-object
-                            [name (symbol->string name)]
-                            [line line]
-                            [char char]
-                            [meta (json:make-object
-                                   [anno-pass 1])])])
-                  (hashtable-update! refs (key name line char)
-                    (lambda (old)
-                      (if old
-                          (json:merge old new)
-                          new))
-                    #f))))))
-         [`(catch ,reason)
-          (trace-expr `(walk-refs => ,(exit-reason->english reason)))]
-         [,_ (void)]))
+          (trace-expr `(,who => ,(exit-reason->english reason)))
+          #f]
+         [,_ #t]))
+      (define (defns-anno)
+        (and annotated-code
+             (try-walk 'walk-defns walk-defns annotated-code source-object-bfp
+               (json:make-object
+                [definition 1]
+                [anno-pass 1]))))
+      (define (defns-re)
+        (try-walk 'walk-defns-re walk-defns-re text car
+          (json:make-object
+           [definition 1]
+           [regexp-pass 1])))
+      (define (refs-anno)
+        (and annotated-code
+             (try-walk 'walk-refs walk-refs annotated-code source-object-bfp
+               (json:make-object
+                [anno-pass 1]))))
+      (define (refs-re)
+        (try-walk 'walk-refs-re walk-refs-re text car
+          (json:make-object
+           [regexp-pass 1])))
+      (or (defns-anno) (defns-re))
+      (or (refs-anno) (refs-re))
       (tower-client:update-references filename
         (vector->list (hashtable-values refs)))))
 
