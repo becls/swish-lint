@@ -323,30 +323,33 @@ order by B.rank desc, B.count desc, A.name asc"
       [update-references
        (let ([filename (json:get msg '(params filename))]
              [refs (json:get msg '(params references))]
-             [root-fk (root-key)])
+             [root-fk (root-key)]
+             [start (erlang:now)])
          (assert (path-absolute? filename))
-         (transaction 'log-db
-           (let ([ts (erlang:now)])
-             (execute "delete from refs where filename=?" filename)
-             (for-each
-              (lambda (ref)
-                (let ([meta (json:get ref 'meta)])
-                  (execute "insert into refs(timestamp,root_fk,filename,name,type,line,char,meta) values(?,?,?,?,?,?,?,?)"
-                    (coerce ts)
-                    (coerce root-fk)
-                    (coerce filename)
-                    (coerce (json:get ref 'name))
-                    (coerce (and (= (json:ref meta 'definition 0) 1)
-                                 "defn"))
-                    (coerce (json:get ref 'line))
-                    (coerce (json:get ref 'char))
-                    (coerce meta))))
-              refs)
+         (db:log 'log-db "delete from refs where filename=?" filename)
+         (for-each
+          (lambda (ref)
+            (let ([meta (json:get ref 'meta)])
+              (db:log 'log-db "insert into refs(timestamp,root_fk,filename,name,type,line,char,meta) values(?,?,?,?,?,?,?,?)"
+                (coerce start)
+                (coerce root-fk)
+                (coerce filename)
+                (coerce (json:get ref 'name))
+                (coerce (and (= (json:ref meta 'definition 0) 1)
+                             "defn"))
+                (coerce (json:get ref 'line))
+                (coerce (json:get ref 'char))
+                (coerce meta))))
+          refs)
+         (unless (< (verbosity) 1)
+           (transaction 'log-db
              (do-log 1
                (json:make-object
                 [_op_ "update-references"]
+                [filename filename]
                 [definitions (scalar (execute "select count(*) from refs where type='defn'"))]
-                [references (scalar (execute "select count(*) from refs"))]))))
+                [references (scalar (execute "select count(*) from refs"))]
+                [time (- (erlang:now) start)]))))
          (rpc:respond ws msg "ok"))]
       [shutdown
        (do-log 1 (json:make-object [_op_ "shutdown"]))
