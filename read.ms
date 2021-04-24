@@ -38,6 +38,7 @@
     ["opt" (extract-name "(define-options opt ...)")]
     [#f (extract-name "(define- f x)")]
     [#f (extract-name "(definegarbage f x)")]
+    [#f (extract-name "(define-inline 2 x ...)")]
     ["x" (extract-name "(set! x 5)")]
     ["x" (extract-name "(set-who! x 'me)")]
     [#f (extract-name "(setgarbage! x 'me)")]

@@ -142,7 +142,9 @@
     (let lp ([start 0])
       (match (pregexp-match-positions defn-regexp text start)
         [(,_ (,start . ,end))
-         (proc table (substring text start end) (cons start end))
+         (let ([name (substring text start end)])
+           (unless (string->number name)
+             (proc table name (cons start end))))
          (lp end)]
         [,_ (void)])))
 
@@ -188,7 +190,9 @@
     (let lp ([start 0])
       (match (pregexp-match-positions ref-regexp text start)
         [((,start . ,end))
-         (proc table (substring text start end) (cons start end))
+         (let ([name (substring text start end)])
+           (unless (string->number name)
+             (proc table name (cons start end))))
          (lp end)]
         [#f (void)])))
 
