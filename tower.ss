@@ -440,18 +440,7 @@ order by B.rank desc, B.count desc, A.name asc"
   (define (tower-db:setup)
     (define schema-name 'swish-lint)
     (define schema-version "2020-05-22")
-    (define (create-db)
-      (define max-days 1)
-      (define (create-prune-on-insert-trigger table column)
-        (execute
-         (format "create temporary trigger prune_~a after insert on ~:*~a begin delete from ~:*~a where rowid in (select rowid from ~:*~a where ~a < new.~:*~a - ~d limit 10); end"
-           table column (* max-days 24 60 60 1000))))
-
-      (define-syntax create-prune-on-insert-triggers
-        (syntax-rules ()
-          [(_ (table column) ...)
-           (begin (create-prune-on-insert-trigger 'table 'column) ...)]))
-
+    (define (init-db)
       (define (create-index name sql)
         (execute (format "create index if not exists ~a on ~a" name sql)))
 
@@ -478,21 +467,24 @@ order by B.rank desc, B.count desc, A.name asc"
         [path text]
         [meta text])
 
-      (create-prune-on-insert-triggers
-       [events timestamp])
+      (create-prune-on-insert-trigger 'events 'timestamp 1 10)
+      (create-index 'events_timestamp "events(timestamp)")
 
       (create-index 'refs_name "refs(name)")
       (create-index 'refs_root "refs(root_fk)")
       (create-index 'refs_type "refs(type)"))
     (define (upgrade-db)
       (match (log-db:version schema-name)
-        [,@schema-version (create-db)]
+        [,@schema-version 'ok]
         [#f
          (log-db:version schema-name schema-version)
-         (create-db)]
+         'ok]
         [,version (throw `#(unsupported-db-version ,schema-name ,version))]))
 
-    (match (db:transaction 'log-db upgrade-db)
+    (match (db:transaction 'log-db
+             (lambda ()
+               (upgrade-db)
+               (init-db)))
       [#(ok ,_)
        (match (try (get-keywords))
          [`(catch ,reason)
@@ -502,6 +494,7 @@ order by B.rank desc, B.count desc, A.name asc"
              [error (exit-reason->english reason)]))]
          [,keywords
           ($update-keywords (erlang:now) keywords)])
+       (db:expire-cache 'log-db)
        'ignore]
       [,error error]))
 
