@@ -69,10 +69,10 @@
       [() #f]))
 
   (define ($update-keywords timestamp keywords)
-    (execute "delete from keywords")
+    (db:log 'log-db "delete from keywords")
     (for-each
      (lambda (kw)
-       (execute "insert into keywords(timestamp,keyword,meta) values(?,?,?)"
+       (db:log 'log-db "insert into keywords(timestamp,keyword,meta) values(?,?,?)"
          (coerce timestamp)
          (coerce (json:get kw 'keyword))
          (coerce (json:get kw 'meta))))
@@ -312,13 +312,16 @@ order by B.rank desc, B.count desc, A.name asc"
             [root-dir dir]
             [root-key key])))]
       [update-keywords
-       (let ([keywords (json:get msg '(params keywords))])
-         (transaction 'log-db
-           ($update-keywords (erlang:now) keywords)
-           (do-log 1
-             (json:make-object
-              [_op_ "update-keywords"]
-              [keywords (scalar (execute "select count(*) from keywords"))])))
+       (let ([keywords (json:get msg '(params keywords))]
+             [start (erlang:now)])
+         ($update-keywords start keywords)
+         (unless (< (verbosity) 1)
+           (transaction 'log-db
+             (do-log 1
+               (json:make-object
+                [_op_ "update-keywords"]
+                [keywords (scalar (execute "select count(*) from keywords"))]
+                [time (- (erlang:now) start)]))))
          (rpc:respond ws msg "ok"))]
       [update-references
        (let ([filename (json:get msg '(params filename))]
@@ -478,15 +481,6 @@ order by B.rank desc, B.count desc, A.name asc"
       (create-prune-on-insert-triggers
        [events timestamp])
 
-      (match (try (get-keywords))
-        [`(catch ,reason)
-         (do-log 1
-           (json:make-object
-            [_op_ "get-keywords"]
-            [error (exit-reason->english reason)]))]
-        [,keywords
-         ($update-keywords (erlang:now) keywords)])
-
       (create-index 'refs_name "refs(name)")
       (create-index 'refs_root "refs(root_fk)")
       (create-index 'refs_type "refs(type)"))
@@ -499,7 +493,16 @@ order by B.rank desc, B.count desc, A.name asc"
         [,version (throw `#(unsupported-db-version ,schema-name ,version))]))
 
     (match (db:transaction 'log-db upgrade-db)
-      [#(ok ,_) 'ignore]
+      [#(ok ,_)
+       (match (try (get-keywords))
+         [`(catch ,reason)
+          (do-log 1
+            (json:make-object
+             [_op_ "get-keywords"]
+             [error (exit-reason->english reason)]))]
+         [,keywords
+          ($update-keywords (erlang:now) keywords)])
+       'ignore]
       [,error error]))
 
   (define (tower:start-server verbose tower-db)
