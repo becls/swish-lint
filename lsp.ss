@@ -457,7 +457,7 @@
                [root-dir #f]
                [req->pid (ht:make equal-hash equal?
                            (lambda (x) (or (fixnum? x) (string? x))))]
-               [pid->req (ht:make equal-hash eq? process?)]
+               [pid->req (ht:make process-id eq? process?)]
                [uri->doc (ht:make string-hash string=? string?)]
                [client-cap #f]
                [requests (ht:make string-hash string=? string?)]
