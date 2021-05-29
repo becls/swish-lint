@@ -29,6 +29,7 @@
    (chezscheme)
    (json)
    (keywords)
+   (progress)
    (read)
    (swish imports)
    (tower-client)
@@ -104,7 +105,8 @@
            (lambda () e1 e2 ...)
            (lambda result
              (let ([end (erlang:now)])
-               (pretty-print `(time ,who ,(- end start)) (trace-output-port))
+               (pretty-print `(time ,who ,(- end start) ms)
+                 (trace-output-port))
                (newline (trace-output-port))
                (flush-output-port (trace-output-port))
                (apply values result)))))]))
@@ -151,7 +153,20 @@
   (define (make-location uri range)
     (json:make-object [uri uri] [range range]))
 
-  (define (doc:start&link uri init-text)
+  (define (make-progress token title render-msg)
+    (match (progress:start title render-msg
+             (lambda (msg)
+               (rpc:fire-event "$/progress"
+                 (json:make-object
+                  [token token]
+                  [value msg])))
+             trace-expr)
+      [#(ok ,pid) pid]
+      [#(error ,reason)
+       (trace-expr `(make-progress => ,(exit-reason->english reason)))
+       #f]))
+
+  (define (doc:start&link uri init-text progress)
     (define-state-tuple <document> text worker-pid)
     (define (init text)
       `#(ok ,(<document> make
@@ -159,7 +174,7 @@
                [worker-pid
                 (if text
                     (start-check text #t)
-                    (start-update-refs))])))
+                    (start-update-refs progress))])))
     (define (terminate reason state) 'ok)
     (define (handle-call msg from state)
       (match msg
@@ -213,15 +228,25 @@
          (check-line-whitespace text report)
          (publish-diagnostics))))
 
-    (define (start-update-refs)
-      (spawn
-       (lambda ()
-         (with-gatekeeper-mutex $update-refs 'infinity
-           (let* ([filename (uri->abs-path uri)]
-                  [text (utf8->string (read-file filename))]
-                  [annotated-code (read-code text)]
-                  [source-table (make-code-lookup-table text)])
-             (do-update-refs uri text annotated-code source-table))))))
+    (define (start-update-refs progress)
+      (define pid
+        (spawn
+         (lambda ()
+           (with-gatekeeper-mutex $update-refs 'infinity
+             (let* ([filename (uri->abs-path uri)]
+                    [text (utf8->string (read-file filename))]
+                    [annotated-code (read-code text)]
+                    [source-table (make-code-lookup-table text)])
+               (do-update-refs uri text annotated-code source-table))))))
+      (when progress
+        (progress:inc-total progress)
+        (spawn
+         (lambda ()
+           (monitor pid)
+           (receive
+            [`(DOWN ,_ ,_ ,_)
+             (progress:inc-done progress)]))))
+      pid)
 
     (gen-server:start&link #f init-text))
 
@@ -492,7 +517,7 @@
         [req->pid (ht:delete req->pid id)]
         [pid->req (ht:delete pid->req pid)]))
 
-    (define (updated uri text skip-delay? state)
+    (define (updated uri text skip-delay? progress state)
       (cond
        [(ht:ref ($state uri->doc) uri #f) =>
         (lambda (doc)
@@ -502,7 +527,7 @@
         (match-let*
          ([#(ok ,pid)
            (watcher:start-child 'main-sup (gensym "document") 1000
-             (lambda () (doc:start&link uri text)))])
+             (lambda () (doc:start&link uri text progress)))])
          ($state copy* [uri->doc (ht:set uri->doc uri pid)]))]))
 
     (define (do-handle-request id method params state)
@@ -613,19 +638,24 @@
                (delete-req id pid state))]
             [else state]))]
         ["initialized"
-         (trace-time enumerate-directories
-           (fold-left
-            (lambda (state fn)
-              (updated (abs-path->uri fn) #f #t state))
-            state
-            (find-files ($state root-dir) "ss" "ms")))]
+         (let ([progress (make-progress "enumerate-directories"
+                           "Analyze files"
+                           (lambda (done total)
+                             (format "~a/~a files" done total)))])
+           (trace-time enumerate-directories
+             (fold-left
+              (lambda (state fn)
+                (updated (abs-path->uri fn) #f #t progress state))
+              state
+              (find-files ($state root-dir) "ss" "ms"))))]
         ["textDocument/didOpen"
          (let ([doc (json:get params '(textDocument))])
-           (updated (json:get doc '(uri)) (json:get doc '(text)) #t state))]
+           (updated (json:get doc '(uri)) (json:get doc '(text)) #t #f state))]
         ["textDocument/didChange"
          (updated
           (json:get params '(textDocument uri))
           (json:get (car (last-pair (json:get params '(contentChanges)))) '(text))
+          #f
           #f
           state)]
         ["textDocument/didSave"
@@ -633,6 +663,7 @@
           (json:get params '(textDocument uri))
           (json:get params '(text))
           #t
+          #f
           state)]
         ["textDocument/didClose" state]
         ["exit" (exit 0)]
