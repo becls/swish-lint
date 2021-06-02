@@ -73,19 +73,15 @@
   (define (lsp:log type msg)
     (unless (string? msg)
       (bad-arg 'lsp:log msg))
-    (lsp:send
-     (json:make-object
-      [jsonrpc "2.0"]
-      [method "window/logMessage"]
-      [params
-       (json:make-object
-        [type
-         (match type
-           [error 1]
-           [warning 2]
-           [info 3]
-           [log 4])]
-        [message msg])])))
+    (rpc:fire-event "window/logMessage"
+      (json:make-object
+       [type
+        (match type
+          [error 1]
+          [warning 2]
+          [info 3]
+          [log 4])]
+       [message msg])))
 
   (define (trace-expr expr)
     (tower-client:log (format "~s" expr))
@@ -200,14 +196,10 @@
     (define (handle-info msg state) (match msg))
 
     (define (publish-diagnostics)
-      (lsp:send
-       (json:make-object
-        [jsonrpc "2.0"]
-        [method "textDocument/publishDiagnostics"]
-        [params
-         (json:make-object
-          [uri uri]
-          [diagnostics (current-diagnostics)])])))
+      (rpc:fire-event "textDocument/publishDiagnostics"
+        (json:make-object
+         [uri uri]
+         [diagnostics (current-diagnostics)])))
 
     (define (start-check text skip-delay?)
       (spawn
