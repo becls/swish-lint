@@ -4,8 +4,11 @@
 *.ss.html
 *.wpo
 *~
+coverage.html
+git.revision
+mat-report.html
+profile.data
+static-keywords
 swish-lint
 swish-lint.boot
 swish-lint.exe
-git.revision
-static-keywords

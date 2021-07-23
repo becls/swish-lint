@@ -13,6 +13,7 @@ Features include:
 - Code completion
 - Goto definition
 - Find references
+- [Indentation](indentation.md)
 
 ## Install for Emacs
 

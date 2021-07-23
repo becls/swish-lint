@@ -25,6 +25,7 @@
  (checkers)
  (chezscheme)
  (flycheck)
+ (indent)
  (json)
  (keywords)
  (lsp)
@@ -43,10 +44,11 @@
        "%file, %type, %line, %column, %bfp, %efp, %msg")]
    [regexp-pass -r (list "<type>" "<regexp>")
      "report <regexp> matches as <type>={info|warning|error}"]
+   [indent --indent bool "indent files (edit in-place)"]
    [tower --tower bool "start tower server"]
    [tower-db --tower-db (string "<filename>") "save tower database to <filename>"]
    [update-keywords --update-keywords bool "update keywords"]
-   [verbose -v count "show debug messages (tower only)"]
+   [verbose -v count "show debug messages (tower and indent only)"]
    [version --version bool "print version information"]
    [files (list . "file") "check file"]))
 
@@ -113,6 +115,39 @@
       (match-let* ([#(ok ,pid) (tower-client:start&link)])
         (unlink pid)
         (tower-client:update-keywords keywords)))]
+   [(and (opt 'indent) (not (null? files)))
+    (let ([verbose (opt 'verbose)])
+      (for-each
+       (lambda (filename)
+         (let* ([text (utf8->string (read-file filename))]
+                [start (erlang:now)]
+                [indented (indent text)]
+                [end (erlang:now)])
+           (cond
+            [(string=? text indented)
+             (printf "Unchanged")]
+            [else
+             (printf "Formatted")
+             (let ([mode (get-mode filename)])
+               (rename-path filename (string-append filename "~"))
+               (let ([op (open-file-to-write filename)])
+                 (on-exit (close-port op)
+                   (display indented op)))
+               (set-file-mode filename mode))])
+           (when verbose
+             (printf " ~6:D LOC ~4d ms"
+               (let ([ip (open-input-string text)])
+                 (let lp ([total 0])
+                   (let ([x (get-char ip)])
+                     (if (eof-object? x)
+                         total
+                         (lp (if (eq? x #\newline)
+                                 (+ total 1)
+                                 total))))))
+               (- end start)))
+           (printf " ~a\n" filename)
+           ))
+       files))]
    [(null? files)
     (display-help (app:name) cli (opt))
     (exit 0)]

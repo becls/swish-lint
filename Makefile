@@ -19,11 +19,11 @@ swish-lint${EXESUFFIX}:: git.revision ${SRC}
 	swish-build -o $@ main.ss -b petite --rtlib swish --libs-visible
 
 test: all
-	swish-test .
+	swish-test --progress test --report mat-report.html .
 
 coverage: all
 	rm -f profile.data
-	swish-test --save-profile profile.data --coverage coverage.html .
+	swish-test --progress test --report mat-report.html --save-profile profile.data --coverage coverage.html .
 
 lint: swish-lint${EXESUFFIX} ${SRC}
 	./swish-lint${EXESUFFIX} ${SRC}
@@ -52,4 +52,4 @@ clean:
 	rm -f git.revision
 	rm -f swish-lint${EXESUFFIX} swish-lint.boot
 	rm -f *.{so,mo,wpo,sop,ss.html}
-	rm -f profile.data coverage.html
+	rm -f profile.data coverage.html mat-report.html
