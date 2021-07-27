@@ -1079,3 +1079,32 @@
       "#;"
       "identifier")))
   )
+
+(indent-mat fold-indent ()
+  (match-let*
+   ([((1 "(let ()" "(let ()")
+      (2 "body)" "  body)"))
+     (reverse
+      (fold-indent
+       (code
+        "(let ()"
+        "body)")
+       '()
+       (lambda (line old new acc)
+         (cons (list line old new) acc))))]
+    ;; Strings that cross lines can be tricky.
+    [((1 "(define str" "(define str")
+      (2 "\"" "  \"")
+      (3 "some text" "some text")
+      (4 "\")" "\")"))
+     (reverse
+      (fold-indent
+       (code
+        "(define str"
+        "\""
+        "some text"
+        "\")")
+       '()
+       (lambda (line old new acc)
+         (cons (list line old new) acc))))])
+   'ok))

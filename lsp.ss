@@ -27,6 +27,7 @@
   (import
    (checkers)
    (chezscheme)
+   (indent)
    (json)
    (keywords)
    (progress)
@@ -153,6 +154,9 @@
   (define (make-location uri range)
     (json:make-object [uri uri] [range range]))
 
+  (define (make-text-edit range text)
+    (json:make-object [range range] [newText text]))
+
   (define (make-progress token title render-msg)
     (match (progress:start title render-msg
              (lambda (msg)
@@ -178,6 +182,8 @@
     (define (terminate reason state) 'ok)
     (define (handle-call msg from state)
       (match msg
+        [get-text
+         `#(reply ,($state text) ,state)]
         [#(get-value-near ,line ,char)
          (let ([table (make-code-lookup-table ($state text))])
            (match (try
@@ -249,6 +255,9 @@
       pid)
 
     (gen-server:start&link #f init-text))
+
+  (define (doc:get-text who)
+    (gen-server:call who 'get-text))
 
   (define (doc:get-value-near who line char)
     (gen-server:call who `#(get-value-near ,line ,char)))
@@ -434,6 +443,32 @@
            (tower-client:get-local-references (uri->abs-path uri) name)))]
        [else '()])))
 
+  (define (indent-range doc range options)
+    (let* ([start (or (and range (json:ref range '(start line) #f)) 0)]
+           [end (or (and range (json:ref range '(end line) #f))
+                    (most-positive-fixnum))]
+           [end-char (or (and range (json:ref range '(end character) #f))
+                         0)]
+           [end (if (zero? end-char)
+                    (- end 1)
+                    end)])
+      (trace-time indent
+        (reverse
+         (fold-indent (doc:get-text doc) '()
+           (lambda (line old new acc)
+             (let ([line (- line 1)])   ; LSP is 0-based
+               (if (and (<= start line end)
+                        (not (string=? old new)))
+                   (cons
+                    (make-text-edit
+                     (make-range
+                      (make-pos line 0)
+                      (make-pos line (max (string-length old)
+                                          (string-length new))))
+                     new)
+                    acc)
+                   acc))))))))
+
   (define (find-files path . extensions)
     (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
     (let search ([path path] [hits '()])
@@ -575,6 +610,8 @@
                   [definitionProvider #t]
                   [referencesProvider #t]
                   [documentHighlightProvider #t]
+                  [documentFormattingProvider #t]
+                  [documentRangeFormattingProvider #t]
                   )])
               ,($state copy
                  [root-uri root-uri]
@@ -617,6 +654,23 @@
             [(ht:ref ($state uri->doc) uri #f) =>
              (lambda (doc)
                `#(spawn ,(lambda () (highlight-references doc uri line char)) ,state))]
+            [else `#(ok () ,state)]))]
+        ["textDocument/formatting"
+         (let ([uri (json:get params '(textDocument uri))]
+               [options (json:get params 'options)])
+           (cond
+            [(ht:ref ($state uri->doc) uri #f) =>
+             (lambda (doc)
+               `#(ok ,(indent-range doc #f options) ,state))]
+            [else `#(ok () ,state)]))]
+        ["textDocument/rangeFormatting"
+         (let ([uri (json:get params '(textDocument uri))]
+               [range (json:get params 'range)]
+               [options (json:get params 'options)])
+           (cond
+            [(ht:ref ($state uri->doc) uri #f) =>
+             (lambda (doc)
+               `#(ok ,(indent-range doc range options) ,state))]
             [else `#(ok () ,state)]))]
         ["shutdown"
          `#(ok #f ,state)]

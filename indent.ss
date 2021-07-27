@@ -23,6 +23,7 @@
 (library (indent)
   (export
    <token>
+   fold-indent
    has-prop?
    indent
    indent-tokens
@@ -766,8 +767,21 @@
        (display (<token> name t) op))
      ls))
 
-  (define (indent text)
+  (define (tokens->string ls)
     (let ([op (open-output-string)])
-      (display-tokens (indent-tokens (tokenize text)) op)
+      (display-tokens ls op)
       (get-output-string op)))
+
+  (define (indent text)
+    (tokens->string (indent-tokens (tokenize text))))
+
+  (define (fold-indent text init proc)
+    (let ([src-port (open-input-string text)]
+          [dst-port (open-input-string (indent text))])
+      (let lp ([line 1] [acc init])
+        (if (eof-object? (peek-char src-port))
+            acc
+            (let ([src-line (get-line src-port)]
+                  [dst-line (get-line dst-port)])
+              (lp (+ line 1) (proc line src-line dst-line acc)))))))
   )
