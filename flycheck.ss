@@ -110,6 +110,6 @@
         [(,code . ,annotated-code)
          (parameterize ([current-source-table (make-code-lookup-table code)])
            (check-import/export annotated-code report)
-           (check-line-whitespace code report)
+           (check-line-whitespace code #f report)
            (run-optional-checkers annotated-code code report))])))
   )

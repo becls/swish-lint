@@ -225,7 +225,7 @@
          (publish-diagnostics)
          (unless skip-delay?
            (receive (after 30000 'ok)))
-         (check-line-whitespace text report)
+         (check-line-whitespace text #t report)
          (publish-diagnostics))))
 
     (define (start-update-refs progress)

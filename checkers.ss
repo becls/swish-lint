@@ -94,7 +94,25 @@
          (lp rest)]
         [,_ (void)])))
 
-  (define (check-line-whitespace text report)
+  (define (check-line-whitespace text collapse? report)
+    (define (yucky rlines text)
+      (let ([lines (reverse rlines)])
+        (cond
+         [collapse?
+          (match lines
+            [() (void)]
+            [(,line . ,_)
+             (report line 'error "~a~@[ (~a times)~]" text
+               (let ([len (length lines)])
+                 (and (> len 1) len)))])]
+         [else
+          (for-each
+           (lambda (line)
+             (report line 'error text))
+           lines)])))
+    (define tabs '())
+    (define dos '())
+    (define ws '())
     (do ([ln 1 (+ ln 1)]
          [lines (split text #\newline) (cdr lines)])
         ((null? lines))
@@ -104,14 +122,17 @@
           (let lp ([i 0])
             (when (< i len)
               (if (char=? (string-ref line i) #\tab)
-                  (report ln 'error "Tabs are yucky")
+                  (set! tabs (cons ln tabs))
                   (lp (+ i 1)))))
           (let ([last-char (string-ref line (- len 1))])
             (cond
              [(char=? last-char #\return)
-              (report ln 'error "DOS line endings are yucky")]
+              (set! dos (cons ln dos))]
              [(char-whitespace? last-char)
-              (report ln 'error "trailing whitespace is yucky")]))))))
+              (set! ws (cons ln ws))])))))
+    (yucky tabs "Tabs are yucky")
+    (yucky dos "DOS line endings are yucky")
+    (yucky ws "trailing whitespace is yucky"))
 
   (define (make-regexp-checker type regexp)
     (define compiled-regexp (pregexp regexp))
