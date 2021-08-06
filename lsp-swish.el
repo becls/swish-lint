@@ -22,6 +22,24 @@
 
 (require 'lsp-mode)
 
+(defun swish-indent-sexp ()
+  "Indent each line of the sexp starting just after point."
+  (interactive)
+  (save-excursion
+    (let ((start (point)))
+      (forward-sexp 1)
+      (lsp-format-region start (point)))))
+
+(defun swish-indent-line ()
+  "Indent current line as Scheme code."
+  (interactive)
+  (save-excursion
+    (beginning-of-line)
+    (let ((start (point)))
+      (end-of-line)
+      (lsp-format-region start (point))))
+  (skip-chars-forward " \t"))
+
 (add-to-list 'lsp-language-id-configuration '(scheme-mode . "scheme"))
 
 (lsp-register-client

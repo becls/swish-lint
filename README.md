@@ -55,3 +55,13 @@ lsp-mode](https://emacs-lsp.github.io/lsp-mode/page/performance/).
 (add-to-list 'exec-path "~/.emacs.d/swish-lint")
 (require 'lsp-swish)
 ```
+
+To use Swish-Lint's indentation, bind `swish-indent-sexp` in your
+scheme mode hook:
+
+```
+(add-hook 'scheme-mode-hook
+  (function
+   (lambda ()
+     (local-set-key (kbd "C-M-q") 'swish-indent-sexp))))
+```
