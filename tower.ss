@@ -486,14 +486,14 @@ order by B.rank desc, B.count desc, A.name asc"
                (upgrade-db)
                (init-db)))
       [#(ok ,_)
-       (match (try (get-keywords))
-         [`(catch ,reason)
-          (do-log 1
-            (json:make-object
-             [_op_ "get-keywords"]
-             [error (exit-reason->english reason)]))]
-         [,keywords
-          ($update-keywords (erlang:now) keywords)])
+       (let ([keywords
+              (get-keywords
+               (lambda (reason)
+                 (do-log 1
+                   (json:make-object
+                    [_op_ "get-keywords"]
+                    [error (exit-reason->english reason)]))))])
+         ($update-keywords (erlang:now) keywords))
        (db:expire-cache 'log-db)
        'ignore]
       [,error error]))

@@ -43,7 +43,6 @@ install: all
 	install -d ${INSTALLROOT}
 	install swish-lint${EXESUFFIX} ${INSTALLROOT}
 	install -m 644 swish-lint.boot ${INSTALLROOT}
-	install generate-keywords ${INSTALLROOT}
 	install -m 644 lsp-swish.el ${INSTALLROOT}
 ifeq (Windows_NT,${OS})
 	install csv*.dll uv.dll osi.dll sqlite3.dll ${INSTALLROOT}

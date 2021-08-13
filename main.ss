@@ -105,7 +105,11 @@
        [else
         (errorf #f "Tower is already running.")]))]
    [(opt 'update-keywords)
-    (let ([keywords (get-keywords)])
+    (let ([keywords
+           (get-keywords
+            (lambda (reason)
+              (fprintf (console-error-port) "~a\n" (exit-reason->english reason))
+              (flush-output-port (console-error-port))))])
       (match-let* ([#(ok ,pid) (tower-client:start&link)])
         (unlink pid)
         (tower-client:update-keywords keywords)))]

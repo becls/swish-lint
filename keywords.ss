@@ -34,6 +34,12 @@
     (let ([c (peek-char ip)])
       (cond
        [(eof-object? c) c]
+       [(char=? c #\()
+        (match (read ip)
+          [(,keyword . ,lib)
+           (json:make-object
+            [keyword (format "~a" keyword)]
+            [meta (json:make-object [library (format "~s" lib)])])])]
        [(char=? c #\{)
         (let ([obj (json:read ip)])
           (unless (json:ref obj 'keyword #f)
@@ -71,30 +77,60 @@
         (on-exit (close-port ip)
           (read-keywords ip ht)))))
 
-  (define (generate-keywords ht)
-    (define generate (path-combine (base-dir) "generate-keywords"))
-    (let-values
-        ([(to-stdin from-stdout from-stderr os-pid)
-          (spawn-os-process "swish" (list generate) self)])
-      (let ([to-stdin (binary->utf8 to-stdin)]
-            [from-stdout (binary->utf8 from-stdout)]
-            [from-stderr (binary->utf8 from-stderr)])
-        (on-exit (begin (close-output-port to-stdin)
-                        (close-input-port from-stdout)
-                        (close-input-port from-stderr))
-          (read-keywords from-stdout ht)
-          (receive
-           (after 10000
-             (osi_kill* os-pid 15)
-             (throw 'os-process-timeout))
-           [#(process-terminated ,@os-pid ,exit-status ,_)
-            (unless (= exit-status 0)
-              (errorf 'generate-keywords
-                "subprocess exited with non-zero status: ~a" exit-status))])))))
+  (define (generate-keywords-expr libs)
+    `(for-each
+      (lambda (lib)
+        (for-each
+         (lambda (export)
+           (printf "(~s . ~s)\n" export lib))
+         (library-exports lib)))
+      ,libs))
 
-  (define (get-keywords)
-    (let ([ht (make-hashtable string-hash string=?)])
-      (generate-keywords ht)
-      (static-keywords ht)
-      (vector->list (hashtable-values ht))))
+  (define (generate-keywords ht report-error)
+    (let f ([exes '((("swish" "-q") (scheme) ,@(library-requirements '(swish imports)))
+                    (("scheme" "-q") (scheme))
+                    (("petite" "-q") (scheme)))])
+      (match exes
+        [()
+         (read-keywords
+          (open-input-string
+           (with-output-to-string
+            (lambda ()
+              (eval (generate-keywords-expr '(quote ((scheme))))))))
+          ht)]
+        [(((,exe . ,args) . ,libs) . ,rest)
+         (call-with-values
+           (lambda () (try (spawn-os-process exe args self)))
+           (case-lambda
+            [(fault)
+             (report-error fault)
+             (f rest)]
+            [(to-stdin from-stdout from-stderr os-pid)
+             (let ([to-stdin (binary->utf8 to-stdin)]
+                   [from-stdout (binary->utf8 from-stdout)]
+                   [from-stderr (binary->utf8 from-stderr)])
+               (fprintf to-stdin "~s\n" (generate-keywords-expr `(,'quasiquote ,libs)))
+               (on-exit (begin (close-input-port from-stdout)
+                               (close-input-port from-stderr))
+                 (close-output-port to-stdin)
+                 (read-keywords from-stdout ht)
+                 (receive
+                  (after 10000
+                    (osi_kill* os-pid 15)
+                    (throw 'os-process-timeout))
+                  [#(process-terminated ,@os-pid ,exit-status ,_)
+                   (unless (= exit-status 0)
+                     (errorf 'generate-keywords
+                       "~a subprocess exited with non-zero status: ~a" exe exit-status))])))]))])))
+
+  (define (get-keywords report-error)
+    (match (try
+            (let ([ht (make-hashtable string-hash string=?)])
+              (generate-keywords ht report-error)
+              (static-keywords ht)
+              (vector->list (hashtable-values ht))))
+      [`(catch ,_ ,err)
+       (report-error err)
+       '()]
+      [,keywords keywords]))
   )
