@@ -514,8 +514,11 @@ order by B.rank desc, B.count desc, A.name asc"
              (http:url-handler
               (match (<request> path request)
                 ["/"
-                 (let ([product-name (software-product-name)]
-                       [num-clients (ui:num-clients)])
+                 (let* ([product-name (software-product-name)]
+                        [num-clients (ui:num-clients)]
+                        [limit (http:find-param "limit" params)]
+                        [limit (and limit (string->number limit))]
+                        [limit (or limit 20)])
                    (match (transaction 'log-db
                             (list
                              (scalar (execute "select count(*) from keywords"))
@@ -523,7 +526,7 @@ order by B.rank desc, B.count desc, A.name asc"
                              (scalar (execute "select count(*) from refs"))
                              (scalar (execute "select count(distinct filename) from refs"))
                              (execute "select datetime(timestamp/1000,'unixepoch','localtime'),path from roots order by timestamp desc")
-                             (execute "select datetime(timestamp/1000,'unixepoch','localtime'),pid,message from events order by rowid desc limit 20")))
+                             (execute "select datetime(timestamp/1000,'unixepoch','localtime'),pid,message from events order by rowid desc limit ?" limit)))
                      [(,keywords ,defns ,refs ,files ,roots ,log)
                       (http:respond conn 200 '(("Content-Type" . "text/html"))
                         (html->bytevector
