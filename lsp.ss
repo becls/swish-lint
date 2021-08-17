@@ -634,9 +634,7 @@
           (json:get params '(text))
           #t
           state)]
-        ["textDocument/didClose"
-         ($state copy*
-           [uri->doc (ht:delete uri->doc (json:get params '(textDocument uri)))])]
+        ["textDocument/didClose" state]
         ["exit" (exit 0)]
         [,_
          (fprintf (console-error-port) "*** Unhandled message ***\n")
