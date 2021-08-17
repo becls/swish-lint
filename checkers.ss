@@ -130,9 +130,9 @@
               (set! dos (cons ln dos))]
              [(char-whitespace? last-char)
               (set! ws (cons ln ws))])))))
-    (yucky tabs "Tabs are yucky")
-    (yucky dos "DOS line endings are yucky")
-    (yucky ws "trailing whitespace is yucky"))
+    (yucky tabs "undesirable tab character")
+    (yucky dos "undesirable DOS line ending")
+    (yucky ws "undesirable trailing whitespace"))
 
   (define (make-regexp-checker type regexp)
     (define compiled-regexp (pregexp regexp))
