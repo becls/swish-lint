@@ -299,11 +299,10 @@
   (define (check uri text)
     (match (try (read-code text))
       [`(catch ,reason)
-       (spawn-update-refs uri #f (make-code-lookup-table text) text)
-       (let ([msg (exit-reason->english reason)])
-         (match (pregexp-match (re "[^:]*:(.*) at line (\\d+)") msg)
-           [(,_whole ,msg ,line) (report (string->number line) 'error msg)]
-           [#f (report 1 'error msg)]))]
+       (let ([table (make-code-lookup-table text)])
+         (spawn-update-refs uri #f table text)
+         (let-values ([(line msg) (reason->line/msg reason table)])
+           (report line 'error msg)))]
       [,annotated-code
        (let ([source-table (make-code-lookup-table text)])
          (spawn-update-refs uri annotated-code source-table text)

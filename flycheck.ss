@@ -100,13 +100,13 @@
 
   (define (flycheck:process-file filename)
     (parameterize ([current-filename filename])
+      (define loaded #f)
       (match (try (let ([code (utf8->string (read-file filename))])
+                    (set! loaded code)
                     (cons code (read-code code))))
         [`(catch ,reason)
-         (let ([msg (exit-reason->english reason)])
-           (match (pregexp-match (re "[^:]*:(.*) at line (\\d+)") msg)
-             [(,_whole ,msg ,line) (report line 'error msg)]
-             [#f (report 1 'error msg)]))]
+         (let-values ([(line msg) (reason->line/msg reason loaded)])
+           (report line 'error msg))]
         [(,code . ,annotated-code)
          (parameterize ([current-source-table (make-code-lookup-table code)])
            (check-import/export annotated-code report)

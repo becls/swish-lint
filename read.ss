@@ -23,11 +23,13 @@
 (library (read)
   (export
    annotation
+   fp->line
    fp->line/char
    line/char->fp
    make-code-lookup-table
    read-code
    read-token-near
+   reason->line/msg
    walk-annotations
    walk-defns
    walk-defns-re
@@ -96,6 +98,27 @@
             (if (< fp (vector-ref table mid))
                 (loop lo mid)
                 (loop mid hi))))))
+
+  (define (fp->line table fp)
+    (let-values ([(line char) (fp->line/char table fp)])
+      line))
+
+  (define (reason->line/msg reason code/table)
+    (let ([msg (exit-reason->english reason)])
+      (match (pregexp-match (re "[^:]*:\\s*((.*) (?:at|near) (line|char) (\\d+))") msg)
+        [(,_ ,_ ,msg "line" ,line)
+         (values (string->number line) msg)]
+        [(,_ ,_ ,msg "char" ,fp)
+         (guard code/table)
+         (values
+          (fp->line
+           (if (string? code/table)
+               (make-code-lookup-table code/table)
+               code/table)
+           (string->number fp))
+          msg)]
+        [(,_ ,msg . ,_) (values 1 msg)]
+        [,_ (values 1 msg)])))
 
   (define (read-token-near code table line char)
     (let ([ip (open-input-string code)]
