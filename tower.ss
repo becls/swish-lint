@@ -501,9 +501,11 @@ order by B.rank desc, B.count desc, A.name asc"
   (define (tower:start-server verbose tower-db)
     (verbosity (or verbose 0))
     (base-dir (path-parent (app:path)))
-    (if tower-db
-        (log-file (path-combine (base-dir) tower-db))
-        (log-file ":memory:"))
+    (log-file
+     (cond
+      [(not tower-db) ":memory:"]
+      [(path-absolute? tower-db) tower-db]
+      [else (path-combine (base-dir) tower-db)]))
     (app-sup-spec
      (append (app-sup-spec)
        `(#(tower-db:setup ,tower-db:setup temporary 1000 worker)
