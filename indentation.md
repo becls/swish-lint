@@ -2,9 +2,10 @@
 
 With inspiration from
 [scmindent](https://github.com/ds26gte/scmindent), this code also
-tries to provide the same style as Emacs while making it relatively
-easy to add new forms.  This code does not currently provide "options"
-as we'd like to apply the same rules to all code. This may change.
+tries to provide a style similar to Emacs while making it
+straightforward to add new forms.  This code does not currently
+provide "options" as we'd like to apply the same rules to all
+code. This may change.
 
 This indenter uses regular expressions to define delimiters in the
 file. This allows it to track both code and comments. Generally, it
@@ -22,21 +23,22 @@ follows this workflow:
 
 ## Not Like Emacs
 
-It should be noted that default Emacs configurations use a
-`fill-column` of 70. Doom Emacs defaults this to 80 without being
-explicitly set in the user's configuration. This code uses 70.
+Default Emacs configurations use a `fill-column` of 70. Doom Emacs
+defaults this to 80 without being explicitly set in the user's
+configuration. This code uses 70.
 
 The following examples attempt to express the differences between
 Emacs's style and this indentation code.
 
 ### Block comments `#| ... |#`
 
-The indenter will leave block comments alone. This makes them more
-convenient for embedding ASCII art and other trivium.
+The indenter leaves block comments alone. This makes them more
+convenient for embedding ASCII art and other insignificant trifles of
+little importance.
 
 ### Datum comments `#;`
 
-The indenter will apply its normal code indentation strategy for datum
+The indenter applies its normal code indentation strategy for datum
 comments `#;`.
 
 ### Certain bytevectors
