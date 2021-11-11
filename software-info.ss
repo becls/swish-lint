@@ -23,6 +23,7 @@
 (library (software-info)
   (export
    software-info:install
+   versions->string
    )
   (import
    (chezscheme)
@@ -37,4 +38,17 @@
           (warningf 'software-info.ss "file ~s not found at compile time" fn)
           #f)))
     (software-version key "0.0.0"))
+
+  (define (output-version op key)
+    (fprintf op "~11@a~@[ ~a~]~@[ (~a)~]\n"
+      (software-product-name key)
+      (software-version key)
+      (software-revision key)))
+
+  (define (versions->string)
+    (let ([op (open-output-string)])
+      (output-version op 'swish-lint)
+      (output-version op 'swish)
+      (output-version op 'chezscheme)
+      (get-output-string op)))
   )

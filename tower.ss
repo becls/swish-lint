@@ -30,6 +30,7 @@
    (chezscheme)
    (json)
    (keywords)
+   (software-info)
    (swish imports)
    )
 
@@ -514,8 +515,7 @@ order by B.rank desc, B.count desc, A.name asc"
              (http:url-handler
               (match (<request> path request)
                 ["/"
-                 (let* ([product-name (software-product-name)]
-                        [num-clients (ui:num-clients)]
+                 (let* ([num-clients (ui:num-clients)]
                         [limit (http:find-param "limit" params)]
                         [limit (and limit (string->number limit))]
                         [limit (or limit 20)])
@@ -533,7 +533,7 @@ order by B.rank desc, B.count desc, A.name asc"
                          `(html5
                            (head
                             (meta (@ (charset "UTF-8")))
-                            (title ,product-name))
+                            (title ,(software-product-name)))
                            (body
                             (pre
                              ,(format "Connected clients: ~9:D\n" num-clients)
@@ -556,8 +556,7 @@ order by B.rank desc, B.count desc, A.name asc"
                                      (format "~a ~a ~a\n" date pid message)]))
                                 log))
                             (hr)
-                            (p ,product-name " Version " ,(software-version)
-                              " (Revision " ,(software-revision) ")")))))]))]
+                            (pre ,(versions->string))))))]))]
                 ["/tower"
                  (ws:upgrade conn request (spawn&link client))]
                 [,_ #f]))))))

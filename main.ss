@@ -63,6 +63,12 @@
       [(,type ,_ . ,_)
        (errorf 'make-optional-passes "invalid type: ~a" type)])))
 
+(define (show-version key)
+  (printf "~11@a~@[ ~a~]~@[ (~a)~]\n"
+    (software-product-name key)
+    (software-version key)
+    (software-revision key)))
+
 (software-info:install)
 (let* ([opt (parse-command-line-arguments cli)]
        [files (or (opt 'files) '())])
@@ -71,17 +77,7 @@
     (display-help (app:name) cli (opt))
     (exit 0)]
    [(opt 'version)
-    (let-values ([(name version)
-                  (cond
-                   [(software-product-name) =>
-                    (lambda (name)
-                      (values name (software-version)))]
-                   [else
-                    (values
-                     (software-product-name 'swish)
-                     (software-version 'swish))])])
-      (printf "~a~@[ Version ~a~]~@[ (~a)~]\n" name version
-        (software-revision)))
+    (display (versions->string))
     (exit 0)]
    [(opt 'lsp)
     (optional-checkers (make-optional-passes opt))
