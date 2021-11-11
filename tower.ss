@@ -207,19 +207,19 @@ order by B.rank desc, B.count desc, A.name asc"
               [root-fk (root-key)]
               [start (erlang:now)]
               [defns
-                (map
-                 (lambda (row)
-                   (match row
-                     [#(,fn ,line ,char)
-                      (json:make-object
-                       [filename fn]
-                       [line line]
-                       [char char])]))
-                 (transaction 'log-db
-                   (or ($defns-in-file name filename)
-                       ($defns-in-workspace name root-fk)
-                       ($defns-anywhere name filename)
-                       '())))]
+               (map
+                (lambda (row)
+                  (match row
+                    [#(,fn ,line ,char)
+                     (json:make-object
+                      [filename fn]
+                      [line line]
+                      [char char])]))
+                (transaction 'log-db
+                  (or ($defns-in-file name filename)
+                      ($defns-in-workspace name root-fk)
+                      ($defns-anywhere name filename)
+                      '())))]
               [end (erlang:now)]
               [log (json:make-object
                     [_op_ "get-definitions"]

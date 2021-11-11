@@ -64,14 +64,14 @@
     (apply-format (report-format)
       (match x
         [,line (guard (fixnum? line))
-          (json:make-object
-           [file (current-filename)]
-           [type type]
-           [line line]
-           [column ""]
-           [bfp ""]
-           [efp ""]
-           [msg (apply format fmt args)])]
+         (json:make-object
+          [file (current-filename)]
+          [type type]
+          [line line]
+          [column ""]
+          [bfp ""]
+          [efp ""]
+          [msg (apply format fmt args)])]
         [#(range ,start-line ,start-column ,end-line ,end-column)
          (guard (and (fixnum? start-line) (fixnum? start-column)
                      (fixnum? end-line) (fixnum? end-column)))

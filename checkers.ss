@@ -46,9 +46,9 @@
         [`(annotation
            [stripped (library ,_ (export . ,_exports) . ,_rest)]
            [expression (,_library ,_
-                         `(annotation
-                           [expression (,export.anno . ,exports.anno)])
-                         . ,rest)])
+                        `(annotation
+                          [expression (,export.anno . ,exports.anno)])
+                        . ,rest)])
          (let* ([exports.anno
                  (filter
                   (lambda (x)

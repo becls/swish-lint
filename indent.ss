@@ -84,7 +84,7 @@
          (cond
           [(and (> (- end start) 0)
                 (as-token text start end #t)) =>
-                (lambda (t) (proc acc t start end))]
+           (lambda (t) (proc acc t start end))]
           [else acc])])))
 
   (define-tuple <token>
@@ -635,7 +635,7 @@
       (get-output-tokens op)))
 
   (define middle-anchor 40)
-  (define max-fill-col 70)              ; Default fill-column from Emacs
+  (define max-fill-col 70)            ; Default fill-column from Emacs
 
   (define-tuple <marker>
     anchor-min

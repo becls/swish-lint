@@ -26,7 +26,7 @@
   (cli-specs
    default-help
    [scheme -s (string "<path>") "the path to Chez Scheme's binary directory"
-    (usage req)]))
+     (usage req)]))
 
 (define opt (parse-command-line-arguments cli))
 

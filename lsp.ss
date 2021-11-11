@@ -192,7 +192,7 @@
                      (and (eq? type 'atomic)
                           (match value
                             [,_ (guard (symbol? value))
-                              (symbol->string value)]
+                             (symbol->string value)]
                             [($primitive ,value)
                              (symbol->string value)]
                             [($primitive ,_ ,value)
@@ -284,8 +284,8 @@
       [range
        (match x
          [,line (guard (fixnum? line))
-           (let ([line (- line 1)])     ; LSP is 0-based
-             (make-range (make-pos line 0) (make-pos (+ line 1) 0)))]
+          (let ([line (- line 1)])      ; LSP is 0-based
+            (make-range (make-pos line 0) (make-pos (+ line 1) 0)))]
          [#(range ,start-line ,start-column ,end-line ,end-column)
           (guard (and (fixnum? start-line) (fixnum? start-column)
                       (fixnum? end-line) (fixnum? end-column)))
