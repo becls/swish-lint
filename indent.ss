@@ -20,20 +20,61 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (indent)
   (export
-   <token>
    fold-indent
    has-prop?
    indent
    indent-tokens
+   token
+   token-bfp
+   token-efp
+   token-err
    token-length
+   token-props
+   token-raw
+   token-type
+   token-value
    tokenize
    )
   (import
    (chezscheme)
    (swish imports)
    )
+  (define $yield
+    (make-process-parameter
+     (lambda args (errorf 'yield "invalid context"))))
+
+  (define (yield x) (($yield) x))
+
+  (define-syntax generator
+    (syntax-rules ()
+      [(_ b1 b2 ...)
+       (let ()
+         (define (wrap return)
+           (lambda (x)
+             (set! return (call/1cc
+                           (lambda (resume-here)
+                             (set! proc resume-here)
+                             (return x))))))
+         (define (proc return)
+           (parameterize ([$yield (wrap return)])
+             b1 b2 ...))
+         (lambda () (call/cc proc)))]))
+
+  (define-record-type token
+    (nongenerative)
+    (fields
+     (immutable type)
+     (immutable value)
+     (immutable raw)
+     (immutable bfp)
+     (immutable efp)
+     (immutable err)
+     (immutable props)
+     ))
+
   (define-enumeration prop-element
     (
      block-comment
@@ -51,100 +92,186 @@
      )
     token-prop)
 
+  (define empty-props (token-prop))
+
   (define delims
-    '("\\("
-      "\\)"
-      "\\["
-      "\\]"
-      "[^\\S\\n]+"               ; contiguous whitespace, not newlines
+    '("[^\\S\\n]+"               ; contiguous whitespace, not newlines
       "\\s"                      ; other whitespace cases
-      "#'"
-      "#`"
-      "#,@?"
-      "'"
-      "`"
-      ",@?"
-      "\""
-      "\\\\"
-      ";{1,3}"                          ; line comments
-      "#;"
-      "#\\\\"
-      "#\\|"
-      "\\|#"
+      ";+[^\\n]*"                ; line comments
+      "#\\|"                     ; lblock-comment
+      "\\|#"                     ; rblock-comment
       ))
 
   (define my-regexp
     (re (join delims #\|)))
 
-  (define (fold-tokens text init proc)
-    (define (as-token str start end char-token?)
-      (cond
-       [(= start end) #f]
-       [(and char-token? (= (+ start 1) end)) (string-ref str start)]
-       [else (substring str start end)]))
-    (define end (string-length text))
-    (let lp ([start 0] [acc init])
-      (match (pregexp-match-positions my-regexp text start)
-        [((,bfp . ,efp))
-         (let* ([acc
-                 (cond
-                  [(as-token text start bfp #f) =>
-                   (lambda (t) (proc acc t start bfp))]
-                  [else acc])]
-                [acc
-                 (cond
-                  [(as-token text bfp efp #t) =>
-                   (lambda (t) (proc acc t bfp efp))]
-                  [else acc])])
-           (lp efp acc))]
-        [,_
+  (define (open-token-string text)
+    (define (build-token* type value bfp efp err props)
+      (make-token type value value bfp efp err props))
+    (define (build-token type value bfp efp err props)
+      (make-token type value (substring text bfp efp) bfp efp err props))
+    (define (as-token str start end err)
+      (and
+       (fx< start end)
+       (let ([first (string-ref str start)]
+             [at-least-two? (> (- end start) 1)])
          (cond
-          [(and (> (- end start) 0)
-                (as-token text start end #t)) =>
-           (lambda (t) (proc acc t start end))]
-          [else acc])])))
+          [(eq? first #\newline)
+           (build-token 'eol #f start end err empty-props)]
+          [(char-whitespace? first)
+           (build-token 'ws (- end start) start end err empty-props)]
+          [(eq? first #\;)
+           (build-token* 'line-comment (substring str start end) start end err (token-prop comment line-comment))]
+          [(and at-least-two?
+                (eq? first #\#)
+                (eq? (string-ref str (fx+ start 1)) #\|))
+           (build-token 'lblock-comment #f start end err empty-props)]
+          [(and at-least-two?
+                (eq? first #\|)
+                (eq? (string-ref str (fx+ start 1)) #\#))
+           (build-token 'rblock-comment #f start end err empty-props)]
+          [else
+           (build-token* 'text (substring str start end) start end err empty-props)]))))
+    (define (gen-ext-tokens start end err)
+      (unless (fx= start end)
+        (let ([c (string-ref text start)])
+          (cond
+           [(eq? c #\newline)           ; newline
+            (let ([next (fx+ start 1)])
+              (yield (build-token 'eol #f start next err empty-props))
+              (gen-ext-tokens next end err))]
+           [(eq? c #\;)                 ; line comments
+            (let lp ([next (fx+ start 1)])
+              (cond
+               [(or (fx>= next end)
+                    (eq? (string-ref text next) #\newline))
+                (yield
+                 (build-token* 'line-comment
+                   (substring text start next)
+                   start
+                   next
+                   err
+                   (token-prop comment line-comment)))
+                (gen-ext-tokens next end err)]
+               [else
+                (lp (fx+ next 1))]))]
+           [(and (eq? c #\#)            ; lblock-comment
+                 (let ([next (fx+ start 1)])
+                   (and (fx< next end)
+                        (eq? (string-ref text next) #\|)
+                        (fx+ next 1)))) =>
+            (lambda (next)
+              (yield (build-token 'lblock-comment #f start next err empty-props))
+              (gen-ext-tokens next end err))]
+           [(and (eq? c #\|)            ; rblock-comment
+                 (let ([next (fx+ start 1)])
+                   (and (fx< next end)
+                        (eq? (string-ref text next) #\#)
+                        (fx+ next 1)))) =>
+            (lambda (next)
+              (yield (build-token 'rblock-comment #f start next err empty-props))
+              (gen-ext-tokens next end err))]
+           [(char-whitespace? c) ; contiguous whitespace, not newlines
+            (let lp ([next (fx+ start 1)])
+              (cond
+               [(or (fx>= next end)
+                    (let ([c2 (string-ref text next)])
+                      (or (eq? c2 #\newline)
+                          (not (char-whitespace? c2)))))
+                (yield (build-token 'ws (fx- next start) start next err empty-props))
+                (gen-ext-tokens next end err)]
+               [else
+                (lp (fx+ next 1))]))]
+           [else
+            (match (pregexp-match-positions my-regexp text start end)
+              [((,bfp . ,efp))
+               ;; Something occurred before the regexp
+               (cond [(as-token text start bfp err) => yield])
+               ;; Regexp found something
+               (cond [(as-token text bfp efp err) => yield])
+               (gen-ext-tokens efp end err)]
+              [,_
+               ;; Something occurred that was not processed by read-token,
+               ;; and was not caught by the regular expressions.
+               (cond [(as-token text start end err) => yield])])]))))
+    (define (gen-tokens)
+      (let ([ip (open-input-string text)]
+            [end (string-length text)])
+        (when (and (fx> end 2)
+                   (eq? (string-ref text 0) #\#)
+                   (eq? (string-ref text 1) #\!)
+                   (let ([x (string-ref text 2)])
+                     (or (eq? x #\space)
+                         (eq? x #\/))))
+          ;; Advance the port, attempt to parse the entire line as
+          ;; extended tokens and continue.
+          (get-line ip)
+          (gen-ext-tokens 0 (port-position ip) #f))
+        (let lp ([prior-efp (port-position ip)])
+          (unless (= prior-efp end)
+            (match (try (let-values ([(type value bfp efp) (read-token ip)])
+                          (unless (= prior-efp bfp)
+                            ;; Something occurred before the read token, read extended tokens first.
+                            (gen-ext-tokens prior-efp bfp #f))
+                          (unless (= bfp efp)
+                            (yield (build-token type value bfp efp #f
+                                     (cond
+                                      [(eq? type 'atomic)
+                                       (cond
+                                        [(string? value) (token-prop string)]
+                                        [(number? value) (token-prop number)]
+                                        [(char? value) (token-prop char)]
+                                        [else empty-props])]
+                                      [else
+                                       empty-props]))))
+                          efp))
+              [`(catch ,r ,err)
+               (let ([s (exit-reason->english r)])
+                 (cond
+                  [(starts-with? s "Exception in read-token: unexpected end-of-file")
+                   ;; Rewind the port, attempt to parse the entire
+                   ;; line as extended tokens and continue.
+                   (set-port-position! ip prior-efp)
+                   (get-line ip)
+                   (let ([efp (port-position ip)])
+                     (gen-ext-tokens prior-efp efp err)
+                     (lp efp))]
+                  [else
+                   ;; Advance the port to the next whitespace
+                   ;; character, attempt to parse the failed
+                   ;; characters as extended tokens and continue.
+                   (let lp ()
+                     (let ([c (get-char ip)])
+                       (if (or (eof-object? c) (char-whitespace? c))
+                           (unget-char ip c)
+                           (lp))))
+                   (let ([efp (port-position ip)])
+                     (gen-ext-tokens prior-efp efp err)
+                     (lp efp))]))]
+              [,efp (lp efp)])))))
+    (generator
+     (gen-tokens)
+     (yield (eof-object))))
 
-  (define-tuple <token>
-    name                    ; char | string
-    group-id                ; defaults to bfp, add-prop smears the set
-    bfp
-    efp
-    props
-    )
+  (define (read-extended-token tg)
+    (tg))
 
-  (define empty-props (token-prop))
+  (define (token-length t)
+    (string-length (token-raw t)))
 
-  (define (token-length x)
-    (cond
-     [(char? x) 1]
-     [(string? x) (string-length x)]
-     [(<token> is? x) (token-length (<token> name x))]))
+  (define (token-open? t)
+    (memq (token-type t) '(lparen lbrack record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren)))
 
-  (define (name-whitespace? name)
-    (or (and (char? name)
-             (char-whitespace? name)
-             (not (eq? name #\newline)))
-        (and (string? name)
-             (name-whitespace? (string-ref name 0)))))
+  (define (token-close? t)
+    (memq (token-type t) '(rparen rbrack)))
 
-  (define (name-line-comment? name)
-    (or (eq? name #\;)
-        (and (string? name) (eq? (string-ref name 0) #\;))))
-
-  (define (name-block-comment? name)
-    (and (string? name) (string=? name "#|")))
-
-  (define (parse input)
-    (reverse
-     (fold-tokens input '()
-       (lambda (acc token bfp efp)
-         (cons (<token> make
-                 [name token]
-                 [group-id bfp]
-                 [bfp bfp]
-                 [efp efp]
-                 [props empty-props])
-           acc)))))
+  (define (parse text)
+    (let ([tp (open-token-string text)])
+      (let lp ()
+        (let ([t (read-extended-token tp)])
+          (if (eof-object? t)
+              '()
+              (cons t (lp)))))))
 
   (define (make-token-port ls)
     (let ([ls ls])
@@ -177,12 +304,12 @@
           [column 0])
       (lambda (op)
         (match op
-          [#(put ,x)
-           (set! ls (cons x ls))
+          [#(put ,t)
+           (set! ls (cons t ls))
            (set! column
-             (if (eq? (<token> name x) #\newline)
+             (if (eq? (token-type t) 'eol)
                  0
-                 (+ column (token-length x))))]
+                 (+ column (token-length t))))]
           [get-column column]
           [get-all
            (let ([result (reverse ls)])
@@ -203,33 +330,37 @@
     (enum-set-union props prop))
 
   (define (add-prop ls prop)
-    (let ([id (<token> group-id (car ls))])
-      (map
-       (lambda (token)
-         (<token> copy* token
-           [group-id id]
-           [props (add-prop* props prop)]))
-       ls)))
+    (map
+     (lambda (t)
+       (make-token
+        (token-type t)
+        (token-value t)
+        (token-raw t)
+        (token-bfp t)
+        (token-efp t)
+        (token-err t)
+        (add-prop* (token-props t) prop)))
+     ls))
 
   (define (has-prop? t prop)
-    (enum-set-member? prop (<token> props t)))
+    (enum-set-member? prop (token-props t)))
 
   (define-syntax token-cond
     (syntax-rules (eof)
-      [(_ $t $name [eof $eof-expr ...] clauses ...)
-       (and (identifier? #'$t) (identifier? #'$name))
+      [(_ $t $type [eof $eof-expr ...] clauses ...)
+       (and (identifier? #'$t) (identifier? #'$type))
        (cond
         [(eof-object? $t) $eof-expr ...]
         [else
-         (let ([$name (<token> name $t)])
+         (let ([$type (token-type $t)])
            (cond clauses ...))])]))
 
   (define (tokens-until* tp keep? pred)
     (let lp ([acc '()])
       (let ([t (peek-token tp)])
-        (token-cond t name
+        (token-cond t type
           [eof (reverse acc)]
-          [(pred name)
+          [(pred type)
            (reverse
             (if keep?
                 (cons (get-token tp) acc)
@@ -237,17 +368,17 @@
           [else
            (lp (cons (get-token tp) acc))]))))
 
-  (define (tokens-until tp tname)
+  (define (tokens-until tp ttype)
     (tokens-until* tp #t
-      (lambda (name) (equal? name tname))))
+      (lambda (type) (equal? type ttype))))
 
   (define (line-tokens tp)
-    (tokens-until tp #\newline))
+    (tokens-until tp 'eol))
 
   (define (space-tokens tp)
     (tokens-until* tp #f
-      (lambda (name)
-        (not (name-whitespace? name)))))
+      (lambda (type)
+        (not (eq? type 'ws)))))
 
   (define (block-tokens tp)
     (let lp ([depth 1] [acc '()])
@@ -255,33 +386,14 @@
        [(= depth 0) (reverse acc)]
        [else
         (let ([t (get-token tp)])
-          (token-cond t name
+          (token-cond t type
             [eof (reverse acc)]
-            [(equal? name "#|")
+            [(eq? type 'lblock-comment)
              (lp (+ depth 1) (cons t acc))]
-            [(equal? name "|#")
+            [(eq? type 'rblock-comment)
              (lp (- depth 1) (cons t acc))]
             [else
              (lp depth (cons t acc))]))])))
-
-  (define (string-tokens tp)
-    (let ([t (get-token tp)])
-      (token-cond t name
-        [eof '()]
-        [(eq? name #\")
-         (cons t '())]
-        [(eq? name #\\)
-         (let ([next (get-token tp)])
-           (if (eof-object? next)
-               (cons t '())
-               (cons* t next (string-tokens tp))))]
-        [(equal? name "#\\")
-         (let ([next (get-token tp)])
-           (if (eof-object? next)
-               (cons t '())
-               (cons* t next (string-tokens tp))))]
-        [else
-         (cons t (string-tokens tp))])))
 
   (define (expr-tokens tp)
     (let lp ([armed? #f] [depth 0] [acc '()])
@@ -289,145 +401,78 @@
        [(and armed? (= depth 0)) (reverse acc)]
        [else
         (let ([t (get-token tp)])
-          (token-cond t name
+          (token-cond t type
             [eof (reverse acc)]
-            [(name-line-comment? name)
+            [(eq? type 'line-comment)
              (let ([comment (line-tokens tp)])
                (lp armed? depth
                  (fold-right cons (cons t acc) (reverse comment))))]
-            [(or (eq? name #\() (eq? name #\[))
+            [(token-open? t)
              (lp #t (+ depth 1) (cons t acc))]
-            [(or (eq? name #\)) (eq? name #\]))
+            [(token-close? t)
              (lp armed? (- depth 1) (cons t acc))]
-            [(or (eq? name #\')
-                 (eq? name #\`)
-                 (eq? name #\,)
-                 (equal? name ",@")
-                 (equal? name "#'")
-                 (equal? name "#`")
-                 (equal? name "#,")
-                 (equal? name "#,@"))
+            [(eq? type 'quote)
              (lp armed? depth (cons t acc))]
-            [(or (eq? name #\newline)
-                 (name-whitespace? name))
+            [(or (eq? type 'eol)
+                 (eq? type 'ws))
              (lp armed? depth (cons t acc))]
-            [(eq? name #\")
-             (let ([string (string-tokens tp)])
-               (lp #t depth
-                 (fold-right cons (cons t acc) (reverse string))))]
             [else
              (lp #t depth (cons t acc))]))])))
 
   (define (mark tp)
     (let ([t (get-token tp)])
-      (token-cond t name
+      (token-cond t type
         [eof '()]
-        [(name-line-comment? name)
-         (let ([comment (cons t (line-tokens tp))])
-           (append
-            (add-prop comment (token-prop comment line-comment))
-            (mark tp)))]
-        [(equal? name "#;")
-         (let* ([tokens (assemble (mark (make-token-port (expr-tokens tp))))]
+        [(and (eq? type 'quote) (eq? (token-value t) 'datum-comment))
+         (let* ([tokens (mark (make-token-port (expr-tokens tp)))]
                 [expr (cons t tokens)])
            (append
             (add-prop expr (token-prop comment datum-comment))
             (mark tp)))]
-        [(equal? name "#|")
+        [(eq? type 'lblock-comment)
          (let ([comment (cons t (block-tokens tp))])
            (append
             (add-prop comment (token-prop comment block-comment))
             (mark tp)))]
-        [(equal? name "#\\")
-         (let ([next (get-token tp)])
-           (if (eof-object? next)
-               (cons t '())
-               (cons* t next (mark tp))))]
-        [(eq? name #\")
-         (let ([string (cons t (string-tokens tp))])
-           (append
-            (add-prop string (token-prop string))
-            (mark tp)))]
-        [(and (string? name) (string->number name))
-         (append (add-prop (list t) (token-prop number)) (mark tp))]
         [else
          (cons t (mark tp))])))
+
+  (define (count-leading-semi s limit)
+    (let ([s-len (string-length s)])
+      (let lp ([n 0])
+        (cond
+         [(and (fx< n limit)
+               (fx< n s-len)
+               (eq? (string-ref s n) #\;))
+          (lp (fx+ n 1))]
+         [else n]))))
 
   (define (mark-whitespace tp)
     (let lp ([start-of-line? #t])
       (let ([t (get-token tp)])
-        (token-cond t name
+        (token-cond t type
           [eof '()]
-          [(eq? name #\newline)
+          [(eq? type 'eol)
            (cons t (lp #t))]
-          [(name-whitespace? name)
+          [(eq? type 'ws)
            (let* ([spaces (cons t (space-tokens tp))]
                   [next (peek-token tp)]
                   [spaces
-                   (token-cond next name
+                   (token-cond next type
                      [eof spaces]
-                     [(eq? name #\newline)
+                     [(eq? type 'eol)
                       (add-prop spaces (token-prop trailing-whitespace))]
-                     [(and (string? name) (starts-with? name ";;;"))
-                      (add-prop spaces (token-prop left-margin-whitespace))]
-                     [(and (string? name) (starts-with? name ";;"))
-                      (add-prop spaces (token-prop with-code-whitespace))]
-                     [(eq? name #\;)
-                      (add-prop spaces (token-prop right-column-whitespace))]
+                     [(eq? type 'line-comment)
+                      (match (count-leading-semi (token-raw next) 3)
+                        [3 (add-prop spaces (token-prop left-margin-whitespace))]
+                        [2 (add-prop spaces (token-prop with-code-whitespace))]
+                        [1 (add-prop spaces (token-prop right-column-whitespace))])]
                      [start-of-line?
                       (add-prop spaces (token-prop leading-whitespace))]
                      [else spaces])])
              (append spaces (lp start-of-line?)))]
           [else
            (cons t (lp #f))]))))
-
-  (define (assemble tokens)
-    ;; Assemble individual tokens into strings, characters, () and [].
-    (let lp ([tokens tokens])
-      (match tokens
-        [() '()]
-        [(,(open <= `(<token> [name #\(]))
-          ,(close <= `(<token> [name #\)] ,efp)) . ,rest)
-         (cons
-          (<token> copy open
-            [name "()"]
-            [efp efp])
-          (lp rest))]
-        [(,(open <= `(<token> [name #\[]))
-          ,(close <= `(<token> [name #\]] ,efp)) . ,rest)
-         (cons
-          (<token> copy open
-            [name "[]"]
-            [efp efp])
-          (lp rest))]
-        [(,(pre <= `(<token> [name "#\\"] ,props))
-          ,(tok <= `(<token> ,name ,efp ,@props)) . ,rest)
-         (cons
-          (<token> copy pre
-            [name (format "#\\~a" name)]
-            [efp efp]
-            [props (add-prop* props (token-prop char))])
-          (lp rest))]
-        [(,(pre <= `(<token> ,name ,group-id ,bfp)) . ,rest)
-         (guard (has-prop? pre 'string))
-         (let ([op (open-output-string)])
-           (display name op)
-           (let ([rest
-                  (let lp ([ls rest])
-                    (match ls
-                      [(,(tok <= `(<token> ,name ,@group-id)) . ,rest)
-                       (guard (has-prop? tok 'string))
-                       (display name op)
-                       (lp rest)]
-                      [,_ ls]))])
-             (cons
-              (let ([name (get-output-string op)])
-                (<token> copy pre
-                  [name name]
-                  [efp (+ bfp (string-length name))]))
-              (lp rest))))]
-        [(,tok . ,rest)
-         (cons tok (lp rest))])))
 
   (define (scheme-no-indent t aol? indent)
     0)
@@ -450,13 +495,6 @@
       [(_ name [ids n] ...)
        (define name
          (let ([ht (make-eq-hashtable)])
-           ;; Because tokens are treated differently than in other
-           ;; environments, we need to make sure they provide no
-           ;; additional indentation during subform-indent.
-           (for-each
-            (lambda (name)
-              (eq-hashtable-set! ht (string->symbol name) scheme-no-indent))
-            '(",@" "#'" "#`" "#," "#,@" "#" "#vu8" "#vfx"))
            (for-each (lambda (id) (eq-hashtable-set! ht id n)) 'ids)
            ...
            ht))]))
@@ -500,15 +538,9 @@
 
   (define (emit-whitespace op n)
     (when (> n 0)
-      (put-token op
-        (<token> make
-          [name (if (= n 1)
-                    #\space
-                    (make-string n #\space))]
-          [group-id #f]
-          [bfp #f]
-          [efp #f]
-          [props empty-props]))))
+      (let ([raw (make-string n #\space)])
+        (put-token op
+          (make-token 'ws raw raw #f #f #f empty-props)))))
 
   (define (emit-tokens op ls)
     (match ls
@@ -532,25 +564,26 @@
       (define default-lin -1)
 
       (define (subform-indent t aol? indent)
-        (token-cond t name
+        (token-cond t type
           [eof (values 0 default-lin)]
-          [(string? name)
-           (cond
-            [(or (has-prop? t 'number)
-                 (has-prop? t 'string)
-                 (has-prop? t 'char))
-             (values 0 -2)]
-            [else
-             (let ([x (lookup-indent name)])
-               (cond
-                [(not x)
-                 (values (scheme-nice-indent t aol? indent) default-lin)]
-                [(integer? x)
-                 (values (scheme-special-indent x t aol? indent) x)]
-                [else
-                 (values (x t aol? indent) default-lin)]))])]
+          ;; Because tokens are treated differently than in other
+          ;; environments, we need to make sure they provide no
+          ;; additional indentation during subform-indent.
+          [(memq type '(lparen lbrack rparen rbrack quote record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren box))
+           (values 0 default-lin)]
+          [(or (has-prop? t 'number)
+               (has-prop? t 'string)
+               (has-prop? t 'char))
+           (values 0 -2)]
           [else
-           (values 0 default-lin)]))
+           (let ([x (lookup-indent (token-raw t))])
+             (cond
+              [(not x)
+               (values (scheme-nice-indent t aol? indent) default-lin)]
+              [(integer? x)
+               (values (scheme-special-indent x t aol? indent) x)]
+              [else
+               (values (x t aol? indent) default-lin)]))]))
 
       (define (increment-subform-count ls)
         (match ls
@@ -568,12 +601,12 @@
       (define (s0 indent rlevels)
         ;; start of line; emit leading whitespace
         (let ([t (get-token ip)])
-          (token-cond t name
+          (token-cond t type
             [eof (void)]
-            [(eq? name #\newline)
+            [(eq? type 'eol)
              (put-token op t)
              (start-new-line rlevels)]
-            [(name-whitespace? name)
+            [(eq? type 'ws)
              (s0
               (if (has-prop? t 'with-code-whitespace)
                   indent
@@ -592,23 +625,23 @@
 
       (define (s1 t indent rlevels)
         ;; line cont'd
-        (token-cond t name
+        (token-cond t type
           [eof (void)]
-          [(eq? name #\newline)
+          [(eq? type 'eol)
            (put-token op t)
            (start-new-line rlevels)]
           [(has-prop? t 'line-comment)
            (put-token op t)
            (s1 (get-token ip) indent rlevels)]
-          [(name-block-comment? name)
+          [(eq? type 'lblock-comment)
            (put-token op t)
            (emit-tokens op (block-tokens ip))
            (s1 (get-token ip) indent rlevels)]
-          [(or (eq? name #\() (eq? name #\[))
+          [(token-open? t)
            (put-token op t)
-           (let* ([indent (+ indent 1)]
+           (let* ([indent (+ indent (token-length t))]
                   [next (get-token ip)]
-                  [aol? (atom-on-line? ip)])
+                  [aol? (atom-on-line? next ip)])
              (let-values ([(delta lin) (subform-indent next aol? indent)])
                (s1 next indent
                  (cons (<level> make
@@ -616,7 +649,7 @@
                          [lin lin]
                          [subform-count -1])
                    rlevels))))]
-          [(or (eq? name #\)) (eq? name #\]))
+          [(token-close? t)
            (put-token op t)
            ;; When the parens are unbalanced, this code continues on
            ;; allowing upcoming subforms to indent according to the
@@ -626,7 +659,7 @@
               (match rlevels
                 [() '()]                ; unbalanced parens
                 [(,_ . ,rest) rest])))]
-          [(name-whitespace? name)
+          [(eq? type 'ws)
            (put-token op t)
            (s1 (get-token ip) (+ indent (token-length t)) rlevels)]
           [else
@@ -635,18 +668,34 @@
              (+ indent (token-length t))
              (increment-subform-count rlevels))]))
 
-      (define (atom-on-line? ip)
+      (define (atom-on-line? first ip)
         (let ([ip (copy-token-input-port ip)])
-          (let lp ([t (get-token ip)])
-            (token-cond t name
+          (define (s0 t)
+            (token-cond t type
               [eof #f]
-              [(eq? name #\newline) #f]
-              [(and (string? name)
-                    (not (name-whitespace? name))
+              [(eq? type 'eol) #f]
+              [(memq type '(lparen lbrack))
+               (s1 (get-token ip))]
+              [(and (eq? type 'atomic)
                     (not (has-prop? t 'line-comment))
                     (not (has-prop? t 'block-comment)))
                #t]
-              [else (lp (get-token ip))]))))
+              [else (s0 (get-token ip))]))
+          (define (s1 t)
+            (token-cond t type
+              [eof #f]
+              [(eq? type 'eol) #f]
+              [(eq? type 'ws) (s1 (get-token ip))]
+              [(memq type '(rparen rbrack)) #t]
+              [(and (eq? type 'atomic)
+                    (not (has-prop? t 'line-comment))
+                    (not (has-prop? t 'block-comment)))
+               #t]
+              [else (s1 (get-token ip))]))
+          (token-cond first type
+            [eof #f]
+            [(eq? type 'eol) #f]
+            [else (s0 (get-token ip))])))
 
       (start-new-line '())
       (get-output-tokens op)))
@@ -664,9 +713,9 @@
     (define ht (make-eq-hashtable))
     (let lp ([line 1] [code-end 0] [line-comment? #f] [line-comment-length 0])
       (let ([t (get-token ip)])
-        (token-cond t name
+        (token-cond t type
           [eof ht]
-          [(eq? name #\newline)
+          [(eq? type 'eol)
            (when line-comment?
              (eq-hashtable-set! ht line
                (<marker> make
@@ -676,7 +725,7 @@
            (lp (+ line 1) 0 #f 0)]
           [(has-prop? t 'line-comment)
            (lp line code-end #t (+ (token-length t) line-comment-length))]
-          [(and (name-whitespace? name)
+          [(and (eq? type 'ws)
                 (has-prop? t 'right-column-whitespace))
            (lp line code-end line-comment? line-comment-length)]
           [else
@@ -741,9 +790,9 @@
             (put-token op t)))
 
         (let ([t (get-token ip)])
-          (token-cond t name
+          (token-cond t type
             [eof (void)]
-            [(eq? name #\newline)
+            [(eq? type 'eol)
              (put-token op t)
              (lp (+ line 1) #f)]
             [(has-prop? t 'block-comment)
@@ -752,7 +801,7 @@
             [(has-prop? t 'right-column-whitespace)
              ;; Don't actually write right-column whitespace yet.
              (lp line t)]
-            [(eq? name #\;)
+            [(= (count-leading-semi (token-raw t) 2) 1)
              (cond
               [(or (not prior)
                    (and prior (has-prop? prior 'right-column-whitespace)))
@@ -769,8 +818,7 @@
 
   (define (tokenize text)
     (let* ([tokens (parse text)]
-           [tokens (mark (make-token-port tokens))]
-           [tokens (assemble tokens)])
+           [tokens (mark (make-token-port tokens))])
       tokens))
 
   (define (indent-tokens tokens)
@@ -781,7 +829,7 @@
   (define (display-tokens ls op)
     (for-each
      (lambda (t)
-       (display (<token> name t) op))
+       (display (token-raw t) op))
      ls))
 
   (define (tokens->string ls)
@@ -801,4 +849,8 @@
             (let ([src-line (get-line src-port)]
                   [dst-line (get-line dst-port)])
               (lp (+ line 1) (proc line src-line dst-line acc)))))))
+
+  (record-writer (csv7:record-type-descriptor (token-prop))
+    (lambda (r p wr)
+      (fprintf p "#<token-prop {~{~a~^,~}}>" (enum-set->list r))))
   )
