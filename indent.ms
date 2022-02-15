@@ -47,7 +47,7 @@
 (define (pretty-token x)
   (match x
     [`(<token> ,name ,props)
-     (format "<token ~s ~a>" name (ht:keys props))]
+     (format "<token ~s ~a>" name (enum-set->list props))]
     [,_
      (guard (list? x))
      (map pretty-token x)]

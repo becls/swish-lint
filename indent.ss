@@ -34,6 +34,23 @@
    (chezscheme)
    (swish imports)
    )
+  (define-enumeration prop-element
+    (
+     block-comment
+     char
+     comment
+     datum-comment
+     leading-whitespace
+     left-margin-whitespace
+     line-comment
+     number
+     right-column-whitespace
+     string
+     trailing-whitespace
+     with-code-whitespace
+     )
+    token-prop)
+
   (define delims
     '("\\("
       "\\)"
@@ -95,7 +112,7 @@
     props
     )
 
-  (define props-ht (ht:make symbol-hash eq? symbol?))
+  (define empty-props (token-prop))
 
   (define (token-length x)
     (cond
@@ -126,7 +143,7 @@
                  [group-id bfp]
                  [bfp bfp]
                  [efp efp]
-                 [props props-ht])
+                 [props empty-props])
            acc)))))
 
   (define (make-token-port ls)
@@ -183,7 +200,7 @@
     (tp 'get-column))
 
   (define (add-prop* props prop)
-    (ht:set props prop #t))
+    (enum-set-union props prop))
 
   (define (add-prop ls prop)
     (let ([id (<token> group-id (car ls))])
@@ -195,7 +212,7 @@
        ls)))
 
   (define (has-prop? t prop)
-    (ht:ref (<token> props t) prop #f))
+    (enum-set-member? prop (<token> props t)))
 
   (define-syntax token-cond
     (syntax-rules (eof)
@@ -308,18 +325,18 @@
         [(name-line-comment? name)
          (let ([comment (cons t (line-tokens tp))])
            (append
-            (add-prop (add-prop comment 'comment) 'line-comment)
+            (add-prop comment (token-prop comment line-comment))
             (mark tp)))]
         [(equal? name "#;")
          (let* ([tokens (assemble (mark (make-token-port (expr-tokens tp))))]
                 [expr (cons t tokens)])
            (append
-            (add-prop (add-prop expr 'comment) 'datum-comment)
+            (add-prop expr (token-prop comment datum-comment))
             (mark tp)))]
         [(equal? name "#|")
          (let ([comment (cons t (block-tokens tp))])
            (append
-            (add-prop (add-prop comment 'comment) 'block-comment)
+            (add-prop comment (token-prop comment block-comment))
             (mark tp)))]
         [(equal? name "#\\")
          (let ([next (get-token tp)])
@@ -329,10 +346,10 @@
         [(eq? name #\")
          (let ([string (cons t (string-tokens tp))])
            (append
-            (add-prop string 'string)
+            (add-prop string (token-prop string))
             (mark tp)))]
         [(and (string? name) (string->number name))
-         (append (add-prop (list t) 'number) (mark tp))]
+         (append (add-prop (list t) (token-prop number)) (mark tp))]
         [else
          (cons t (mark tp))])))
 
@@ -350,15 +367,15 @@
                    (token-cond next name
                      [eof spaces]
                      [(eq? name #\newline)
-                      (add-prop spaces 'trailing-whitespace)]
+                      (add-prop spaces (token-prop trailing-whitespace))]
                      [(and (string? name) (starts-with? name ";;;"))
-                      (add-prop spaces 'left-margin-whitespace)]
+                      (add-prop spaces (token-prop left-margin-whitespace))]
                      [(and (string? name) (starts-with? name ";;"))
-                      (add-prop spaces 'with-code-whitespace)]
+                      (add-prop spaces (token-prop with-code-whitespace))]
                      [(eq? name #\;)
-                      (add-prop spaces 'right-column-whitespace)]
+                      (add-prop spaces (token-prop right-column-whitespace))]
                      [start-of-line?
-                      (add-prop spaces 'leading-whitespace)]
+                      (add-prop spaces (token-prop leading-whitespace))]
                      [else spaces])])
              (append spaces (lp start-of-line?)))]
           [else
@@ -389,7 +406,7 @@
           (<token> copy pre
             [name (format "#\\~a" name)]
             [efp efp]
-            [props (add-prop* props 'char)])
+            [props (add-prop* props (token-prop char))])
           (lp rest))]
         [(,(pre <= `(<token> ,name ,group-id ,bfp)) . ,rest)
          (guard (has-prop? pre 'string))
@@ -491,7 +508,7 @@
           [group-id #f]
           [bfp #f]
           [efp #f]
-          [props props-ht]))))
+          [props empty-props]))))
 
   (define (emit-tokens op ls)
     (match ls
