@@ -148,6 +148,7 @@
               [((,start . ,end) . ,rest)
                (report `#(range ,ln ,start ,ln ,end)
                  type
+                 "~a"
                  (substring line start end))
                (lp rest)]))))))
   )
