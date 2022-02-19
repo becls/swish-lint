@@ -6,6 +6,8 @@
 *~
 coverage.html
 git.revision
+mat-actual/
+mat-expected/
 mat-report.html
 profile.data
 static-keywords
