@@ -630,6 +630,16 @@
 
   (check-indent
    (code
+    (spaces 40 "; line 1")
+    (spaces 40 ";")
+    (spaces 40 "; line 3"))
+   (code
+    "; line 1"
+    ";"
+    "; line 3"))
+
+  (check-indent
+   (code
     "(let ()"
     "  ;; (open a paren and"
     "  ;; close it on the next line)"
