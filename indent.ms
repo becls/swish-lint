@@ -721,6 +721,12 @@
 
   (check-indent
    (code
+    (spaces 40 "; align middle     ; stay 5 spaces away"))
+   (code
+    "; align middle     ; stay 5 spaces away"))
+
+  (check-indent
+   (code
     "(let ()"
     "  ;; (open a paren and"
     "  ;; close it on the next line)"
