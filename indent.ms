@@ -686,6 +686,65 @@
     "body ...]"
     "[()"
     "body ...])"))
+
+  (check-indent
+   (code
+    "(case-lambda"
+    " [(x)"
+    "  body ...]"
+    " [() (do-operation"
+    "      (on-two-lines))"
+    "  body ...])")
+   (code
+    "(case-lambda"
+    "[(x)"
+    "body ...]"
+    "[() (do-operation"
+    "(on-two-lines))"
+    "body ...])"))
+
+  (check-indent
+   (code
+    "(match x"
+    "  [(abc ."
+    "    def)"
+    "   body])")
+   (code
+    "(match x"
+    "[(abc ."
+    "def)"
+    "body])"))
+
+  (check-indent
+   (code
+    "(match x"
+    "  [(,abc ."
+    "    ,def)"
+    "   body])")
+   (code
+    "(match x"
+    "[(,abc ."
+    ",def)"
+    "body])"))
+
+  (check-indent
+   (code
+    "`((foo . bar)"
+    "  (baz ."
+    "   quux)"
+    "  (quuz ."
+    "   ,corge)"
+    "  (grault ."
+    "   ,(garply 'waldo)))")
+   (code
+    "`((foo . bar)"
+    "(baz ."
+    "quux)"
+    "(quuz ."
+    ",corge)"
+    "(grault ."
+    ",(garply 'waldo)))"))
+
   (check-indent
    (code
     "(vector #,@"
