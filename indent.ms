@@ -632,6 +632,20 @@
     "(parameterize ([p 12])"
     "body"
     "...)"))
+
+  (check-indent
+   (code
+    "(case-lambda"
+    " [(x)"
+    "  body ...]"
+    " [()"
+    "  body ...])")
+   (code
+    "(case-lambda"
+    "[(x)"
+    "body ...]"
+    "[()"
+    "body ...])"))
   )
 
 ;; This header is handy in Emacs with column-number-mode to look
