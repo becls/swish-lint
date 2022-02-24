@@ -592,6 +592,46 @@
     "body"
     "...]"
     ")"))
+
+  (check-indent
+   (code
+    "(module ()"
+    "  body"
+    "  ...)")
+   (code
+    "(module ()"
+    "body"
+    "...)"))
+
+  (check-indent
+   (code
+    "(module ;; ()"
+    " body"
+    " ...)")
+   (code
+    "(module ;; ()"
+    "body"
+    "...)"))
+
+  (check-indent
+   (code
+    "(module []"
+    "  body"
+    "  ...)")
+   (code
+    "(module []"
+    "body"
+    "...)"))
+
+  (check-indent
+   (code
+    "(parameterize ([p 12])"
+    "  body"
+    "  ...)")
+   (code
+    "(parameterize ([p 12])"
+    "body"
+    "...)"))
   )
 
 ;; This header is handy in Emacs with column-number-mode to look
