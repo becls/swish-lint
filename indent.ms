@@ -46,8 +46,8 @@
 
 (define (pretty-token x)
   (match x
-    [`(<token> ,name ,props)
-     (format "<token ~s ~a>" name (enum-set->list props))]
+    [`(token ,raw ,props)
+     (format "<token ~s ~a>" raw (enum-set->list props))]
     [,_
      (guard (list? x))
      (map pretty-token x)]
@@ -72,7 +72,7 @@
 (define (check-tokens expected input)
   (check-tokens*
    (lambda (expected actual)
-     (equal? expected (map (<token> name) actual)))
+     (equal? expected (map token-raw actual)))
    expected
    input))
 
@@ -1060,38 +1060,59 @@
    (lambda (p)
      (match p
        [(,token ,text)
-        (check-tokens (list token) text)]))
-   '( ;; fold-tokens
-     (#\( "(")
-     (#\) ")")
-     (#\[ "[")
-     (#\] "]")
-     (#\space " ")
-     ("  " "  ")
-     (#\tab "\t")
-     ("#'" "#'")
-     ("#`" "#`")
-     ("#," "#,")
-     ("#,@" "#,@")
-     (#\' "'")
-     (#\` "`")
-     (#\, ",")
-     (",@" ",@")
-     ("\"" "\"")
-     (#\\ "\\")
-     (#\; ";")
-     (";;" ";;")
-     (";;;" ";;;")
-     (#\# "#")
-     ("#;" "#;")
-     ("#\\" "#\\")
-     ("#|" "#|")
-     ("|#" "|#")
-     ;; assemble-tokens
-     ("()" "()")
-     ("[]" "[]")
-     ("#\\newline" "#\\newline")
-     ("\"string\"" "\"string\"")
+        (check-tokens*
+         (lambda (expected actual)
+           (equal? expected (map token-type actual)))
+         (list token)
+         text)]))
+   '(;; read-token
+     (atomic "symbol")
+     (atomic "#t")
+     (atomic "#f")
+     (atomic "123")
+     (atomic "#!eof")
+     (atomic "#\\newline")
+     (atomic "\"string\"")
+     (box "#&")
+     (dot ".")
+     (fasl "#@")
+     (insert "#0#")
+     (lbrack "[")
+     (lparen "(")
+     (mark "#0=")
+     (quote "#'")
+     (quote "#,")
+     (quote "#,@")
+     (quote "#;")
+     (quote "#`")
+     (quote "'")
+     (quote ",")
+     (quote ",@")
+     (quote "`")
+     (rbrack "]")
+     (record-brack "#[")
+     (rparen ")")
+     (vfxnparen "#2vfx(")
+     (vfxparen "#vfx(")
+     (vnparen "#2(")
+     (vparen "#(")
+     (vu8nparen "#2vu8(")
+     (vu8paren "#vu8(")
+     ;; extensions
+     (ws " ")
+     (ws "  ")
+     (ws "\t")
+     (eol "\n")
+     (line-comment ";")
+     (line-comment ";;")
+     (line-comment ";;;")
+     ;; read-token failures are marked incomplete
+     (incomplete "\"")
+     (incomplete "\\")
+     (incomplete "#")
+     (incomplete "#\\")
+     (incomplete "#|")
+     (incomplete "|#")
      ))
 
   ;; Cases to cover string-tokens
@@ -1116,19 +1137,19 @@
    (code "\"complete named character #\\newline\""))
 
   (check-tokens
-   (list "\"string1\"" #\space "\"string2\"")
+   (list "\"string1\"" " " "\"string2\"")
    (code "\"string1\" \"string2\""))
 
   (check-tokens
-   (list #\(
-     "define" #\space "x" #\space
+   (list "("
+     "define" " " "x" " "
      "\"a string constant; with semicolon and embedded \\\"quotes\\\".\""
-     #\))
+     ")")
    (code "(define x \"a string constant; with semicolon and embedded \\\"quotes\\\".\")"))
 
   (check-tokens*
    (lambda (expected actual)
-     (and (equal? expected (map (<token> name) actual))
+     (and (equal? expected (map token-raw actual))
           (for-all (lambda (x) (has-prop? x 'comment)) actual)
           (for-all (lambda (x) (has-prop? x 'datum-comment)) actual)
           (match actual [(,_ ,str) (has-prop? str 'string)])))
@@ -1137,14 +1158,14 @@
 
   (check-tokens*
    (lambda (expected actual)
-     (and (equal? expected (map (<token> name) actual))
+     (and (equal? expected (map token-raw actual))
           (match actual
             [(,_ ,str ,_ ,ident)
              (and (has-prop? str 'string)
                   (has-prop? str 'comment)
                   (has-prop? str 'datum-comment)
                   (not (has-prop? ident 'comment)))])))
-   (list "#;" "\"string1\"" #\space "abc")
+   (list "#;" "\"string1\"" " " "abc")
    (code "#;\"string1\" abc"))
 
   (let ()
@@ -1152,20 +1173,20 @@
     ;; have no impact on the properties.
     (check-tokens*
      (lambda (expected actual)
-       (and (equal? expected (map (<token> name) actual))
+       (and (equal? expected (map token-raw actual))
             (for-all (lambda (x) (has-prop? x 'comment)) actual)
             (for-all (lambda (x) (has-prop? x 'datum-comment)) actual)))
-     (list "#;" #\space ";;" #\space "comment" #\newline "identifier")
+     (list "#;" " " ";; comment" "\n" "identifier")
      (code
       "#; ;; comment"
       "identifier"))
 
     (check-tokens*
      (lambda (expected actual)
-       (and (equal? expected (map (<token> name) actual))
+       (and (equal? expected (map token-raw actual))
             (for-all (lambda (x) (has-prop? x 'comment)) actual)
             (for-all (lambda (x) (has-prop? x 'datum-comment)) actual)))
-     (list "#;" #\newline "identifier")
+     (list "#;" "\n" "identifier")
      (code
       "#;"
       "identifier")))
