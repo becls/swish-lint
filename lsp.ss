@@ -32,6 +32,7 @@
    (keywords)
    (progress)
    (read)
+   (software-info)
    (swish imports)
    (tower-client)
    )
@@ -587,7 +588,7 @@
     (define (handle-request id method params state)
       (match method
         ["initialize"
-         (trace-msg (json:make-object [method method] [params params]))
+         ;;(trace-msg (json:make-object [method method] [params params]))
          (let* ([root-uri (json:get params '(rootUri))]
                 [root-dir (uri->abs-path root-uri)]
                 [client-cap (json:get params '(capabilities))])
@@ -772,6 +773,7 @@
                        [`(EXIT ,_ ,_) (event-mgr:unregister)])))))
          permanent 1000 worker)
        ))
+    (fprintf (trace-output-port) "~a\n" (versions->string))
     (app:start)
     (receive))
   )
