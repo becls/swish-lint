@@ -76,6 +76,14 @@
    expected
    input))
 
+(define (check-error-tokens expected input)
+  (check-tokens*
+   (lambda (expected actual)
+     (and (for-all token-err actual)
+          (equal? expected (map token-raw actual))))
+   expected
+   input))
+
 (define (check-indent expected input)
   (define (maybe-write-file prefix text)
     (when write-files?
@@ -943,14 +951,32 @@
     "(+ x y))"))
 
   (check-indent
+   ;; If the failure is an end-of-file while reading the incomplete
+   ;; string, we can expect the read-token failover to produce a
+   ;; reasonable output.
    (code
     "#; \"incomplete string"
     "(let ()"
-    "(+ x y))")
+    "  (+ x y))")
    (code
     "#; \"incomplete string"
     "(let ()"
     "(+ x y))"))
+
+  (check-indent
+   ;; If the failure is an invalid character while reading the
+   ;; incomplete string, we can expect the read-token failover to
+   ;; produce a poor output.
+   (code
+    "#; \"incomplete string"
+    "(let ()"
+    "(+ x y))"
+    "(define sep #\\;)")
+   (code
+    "#; \"incomplete string"
+    "(let ()"
+    "(+ x y))"
+    "(define sep #\\;)"))
 
   (check-indent
    (code
@@ -1065,11 +1091,11 @@
   (for-each
    (lambda (p)
      (match p
-       [(,token ,text)
+       [(,type ,text)
         (check-tokens*
          (lambda (expected actual)
            (equal? expected (map token-type actual)))
-         (list token)
+         (list type)
          text)]))
    '(;; read-token
      (atomic "symbol")
@@ -1112,30 +1138,43 @@
      (line-comment ";")
      (line-comment ";;")
      (line-comment ";;;")
-     ;; read-token failures are marked incomplete
-     (incomplete "\"")
-     (incomplete "\\")
-     (incomplete "#")
-     (incomplete "#\\")
-     (incomplete "#|")
-     (incomplete "|#")
+     ))
+
+  (for-each
+   (lambda (p)
+     (match p
+       [(,type ,text)
+        (check-tokens*
+         (lambda (expected actual)
+           (and (for-all token-err actual)
+                (equal? expected (map token-type actual))))
+         (list type)
+         text)]))
+   '(;; read-token failures
+     (text "\"")
+     (text "\\")
+     (text "#")
+     (text "#<")
+     (text "#\\")
+     (lblock-comment "#|")
+     (rblock-comment "|#")
      ))
 
   ;; Cases to cover string-tokens
-  (check-tokens
-   (list "\"incomplete string")
+  (check-error-tokens
+   (list "\"incomplete" " " "string")
    (code "\"incomplete string"))
 
-  (check-tokens
-   (list "\"incomplete special character \\")
+  (check-error-tokens
+   (list "\"incomplete" " " "special" " " "character" " " "\\")
    (code "\"incomplete special character \\"))
 
   (check-tokens
    (list "\"complete special character \\n\"")
    (code "\"complete special character \\n\""))
 
-  (check-tokens
-   (list "\"incomplete named character #\\")
+  (check-error-tokens
+   (list "\"incomplete" " " "named" " " "character" " " "#\\")
    (code "\"incomplete named character #\\"))
 
   (check-tokens
