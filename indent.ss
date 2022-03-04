@@ -676,7 +676,8 @@
               [(eq? type 'eol) #f]
               [(memq type '(lparen lbrack))
                (s1 (get-token ip))]
-              [(and (eq? type 'atomic)
+              [(and (or (eq? type 'atomic)
+                        (eq? type 'quote))
                     (not (has-prop? t 'line-comment))
                     (not (has-prop? t 'block-comment)))
                #t]
@@ -687,7 +688,8 @@
               [(eq? type 'eol) #f]
               [(eq? type 'ws) (s1 (get-token ip))]
               [(memq type '(rparen rbrack)) #t]
-              [(and (eq? type 'atomic)
+              [(and (or (eq? type 'atomic)
+                        (eq? type 'quote))
                     (not (has-prop? t 'line-comment))
                     (not (has-prop? t 'block-comment)))
                #t]

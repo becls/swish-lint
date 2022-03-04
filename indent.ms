@@ -666,6 +666,13 @@
     "body ...]"
     "[()"
     "body ...])"))
+  (check-indent
+   (code
+    "(vector #,@"
+    "  (let f () ...))")
+   (code
+    "(vector #,@"
+    "(let f () ...))"))
   )
 
 ;; This header is handy in Emacs with column-number-mode to look
