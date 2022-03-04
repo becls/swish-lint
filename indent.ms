@@ -135,6 +135,26 @@
     "...)"))
   )
 
+(indent-mat lonely ()
+  (for-each
+   (lambda (x)
+     (let ([n (string-length x)])
+       (check-indent
+        (code
+         x
+         (spaces n "1")
+         (spaces n "2")
+         (spaces n "3")
+         (spaces n ")"))
+        (code
+         x
+         "1"
+         "2"
+         "3"
+         ")"))))
+   '("(" "#(" "#vu8(" "#vfx(" "#3vfx(" "#30vfx("))
+  )
+
 (indent-mat data ()
   (check-indent
    (code "")
