@@ -67,6 +67,7 @@
     (nongenerative)
     (fields
      (immutable type)
+     (immutable type-index)
      (immutable value)
      (immutable raw)
      (immutable bfp)
@@ -74,6 +75,31 @@
      (immutable err)
      (immutable props)
      ))
+
+  (define-syntax define-token-predicates
+    (syntax-rules ()
+      [(_ indexer (pred? token ...) ...)
+       (begin
+         (define-enumeration Tokens (token ... ...) token-types)
+         (define indexer (enum-set-indexer (token-types)))
+         (define pred?
+           (let ([set (#%$enum-set-members (token-types token ...))])
+             (lambda (t)
+               (cond
+                [(token-type-index t) =>
+                 (lambda (hit)
+                   (#3%fxbit-set? set hit))]
+                [else #f]))))
+         ...
+         )]))
+
+  (define-token-predicates token-type-indexer
+    (token-open? lparen lbrack record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren)
+    (token-close? rparen rbrack)
+    (no-indent? lparen lbrack record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren rparen rbrack quote box)
+    (simple-open? lparen lbrack)
+    (simple-close? rparen rbrack)
+    (atomic-or-quote? atomic quote))
 
   (define-enumeration prop-element
     (
@@ -107,9 +133,9 @@
 
   (define (open-token-string text)
     (define (build-token* type value bfp efp err props)
-      (make-token type value value bfp efp err props))
+      (make-token type (token-type-indexer type) value value bfp efp err props))
     (define (build-token type value bfp efp err props)
-      (make-token type value (substring text bfp efp) bfp efp err props))
+      (make-token type (token-type-indexer type) value (substring text bfp efp) bfp efp err props))
     (define (as-token str start end err)
       (and
        (fx< start end)
@@ -259,12 +285,6 @@
   (define (token-length t)
     (string-length (token-raw t)))
 
-  (define (token-open? t)
-    (memq (token-type t) '(lparen lbrack record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren)))
-
-  (define (token-close? t)
-    (memq (token-type t) '(rparen rbrack)))
-
   (define (parse text)
     (let ([tp (open-token-string text)])
       (let lp ()
@@ -334,6 +354,7 @@
      (lambda (t)
        (make-token
         (token-type t)
+        (token-type-index t)
         (token-value t)
         (token-raw t)
         (token-bfp t)
@@ -540,7 +561,7 @@
     (when (> n 0)
       (let ([raw (make-string n #\space)])
         (put-token op
-          (make-token 'ws raw raw #f #f #f empty-props)))))
+          (make-token 'ws (token-type-indexer 'ws) raw raw #f #f #f empty-props)))))
 
   (define (emit-tokens op ls)
     (match ls
@@ -569,7 +590,7 @@
           ;; Because tokens are treated differently than in other
           ;; environments, we need to make sure they provide no
           ;; additional indentation during subform-indent.
-          [(memq type '(lparen lbrack rparen rbrack quote record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren box))
+          [(no-indent? t)
            (values 0 default-lin)]
           [(or (has-prop? t 'number)
                (has-prop? t 'string)
@@ -674,10 +695,9 @@
             (token-cond t type
               [eof #f]
               [(eq? type 'eol) #f]
-              [(memq type '(lparen lbrack))
+              [(simple-open? t)
                (s1 (get-token ip))]
-              [(and (or (eq? type 'atomic)
-                        (eq? type 'quote))
+              [(and (atomic-or-quote? t)
                     (not (has-prop? t 'line-comment))
                     (not (has-prop? t 'block-comment)))
                #t]
@@ -687,9 +707,8 @@
               [eof #f]
               [(eq? type 'eol) #f]
               [(eq? type 'ws) (s1 (get-token ip))]
-              [(memq type '(rparen rbrack)) #t]
-              [(and (or (eq? type 'atomic)
-                        (eq? type 'quote))
+              [(simple-close? t) #t]
+              [(and (atomic-or-quote? t)
                     (not (has-prop? t 'line-comment))
                     (not (has-prop? t 'block-comment)))
                #t]
