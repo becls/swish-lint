@@ -21,12 +21,67 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
- (checkers))
+ (checkers)
+ (read))
 
 (define-syntax code
   (syntax-rules ()
     [(_ str ...)
      (ct:join #\newline str ...)]))
+
+(isolate-mat import-export ()
+  (match-let*
+   ([,results '()]
+    [,text (code
+            "(library (lib)"
+            "(export (b) (a))"
+            "(import (d) (c))"
+            "  body)")]
+    [,_
+     (check-import/export (read-code text)
+       (lambda (x type fmt . args)
+         (set! results (cons (list x type (apply format fmt args)) results))))]
+    [,results (reverse results)]
+    [((`(annotation [stripped export]) warning "should sort exports")
+      (`(annotation [stripped (b)]) info "incorrectly sorted: (b)")
+      (`(annotation [stripped (a)]) info "incorrectly sorted: (a)")
+      (`(annotation [stripped import]) warning "should sort imports")
+      (`(annotation [stripped (d)]) info "incorrectly sorted: (d)")
+      (`(annotation [stripped (c)]) info "incorrectly sorted: (c)"))
+     results])
+   'ok))
+
+(isolate-mat line-whitespace ()
+  (match-let*
+   ([,text (code
+            "(let ()   "
+            "\tbody\r"
+            "\tbody   "
+            "...)\r")]
+    [,results '()]
+    [,_
+     (check-line-whitespace text #f
+       (lambda (x type fmt . args)
+         (set! results (cons (list x type (apply format fmt args)) results))))]
+    [,results (reverse results)]
+    [((2 error "undesirable tab character")
+      (3 error "undesirable tab character")
+      (2 error "undesirable DOS line ending")
+      (4 error "undesirable DOS line ending")
+      (1 error "undesirable trailing whitespace")
+      (3 error "undesirable trailing whitespace"))
+     results]
+    [,results '()]
+    [,_
+     (check-line-whitespace text #t
+       (lambda (x type fmt . args)
+         (set! results (cons (list x type (apply format fmt args)) results))))]
+    [,results (reverse results)]
+    [((2 error "undesirable tab character (2 times)")
+      (2 error "undesirable DOS line ending (2 times)")
+      (1 error "undesirable trailing whitespace (2 times)"))
+     results])
+   'ok))
 
 (isolate-mat regexp ()
   (match-let*
@@ -48,3 +103,28 @@
       (#(range 4 11 4 19) info "TEST: ~a"))
      results])
    'ok))
+
+(isolate-mat optional ()
+  (parameterize ([optional-checkers
+                  (list
+                   (make-regexp-checker 'info "INFO.*")
+                   (make-regexp-checker 'warning "WARNING.*")
+                   (make-regexp-checker 'error "ERROR.*"))])
+    (match-let*
+     ([,results '()]
+      [,_
+       (run-optional-checkers #f
+         (code
+          "(let ()"
+          "  body   ; INFO: informative"
+          "  body   ; WARNING: be careful"
+          "  body   ; ERROR: this is broken"
+          "  body)")
+         (lambda (x type fmt . args)
+           (set! results (cons (list x type (apply format fmt args)) results))))]
+      [,results (reverse results)]
+      [((#(range 2 11 2 28) info "INFO: informative")
+        (#(range 3 11 3 30) warning "WARNING: be careful")
+        (#(range 4 11 4 32) error "ERROR: this is broken"))
+       results])
+     'ok)))
