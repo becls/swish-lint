@@ -25,10 +25,12 @@
    annotation
    fp->line
    fp->line/char
+   get-symbol-name
    line/char->fp
    make-code-lookup-table
    read-code
-   read-token-near
+   read-token-near/col
+   read-token-near/fp
    reason->line/msg
    walk-annotations
    walk-defns
@@ -120,12 +122,29 @@
         [(,_ ,msg . ,_) (values 1 msg)]
         [,_ (values 1 msg)])))
 
-  (define (read-token-near code table line char)
-    (let ([ip (open-input-string code)]
-          [start (line/char->fp table line 1)]
-          [fp (line/char->fp table line char)])
-      (set-port-position! ip start)
-      (let lp ([lt #f] [lv #f] [lb start] [le start])
+  (define (get-symbol-name x)
+    (define (clean? s)
+      (let ([len (string-length s)])
+        (let lp ([i 0])
+          (cond
+           [(fx= i len) #t]
+           [(char-whitespace? (string-ref s i)) #f]
+           [else (lp (fx1+ i))]))))
+    (cond
+     [(gensym? x) (parameterize ([print-gensym #t]) (format "~s" x))]
+     [(symbol? x)
+      (let ([s (symbol->string x)])
+        (if (clean? s)
+            s
+            (format "|~a|" s)))]
+     [else x]))
+
+  (define (read-token-near/col str col1)
+    (read-token-near/fp str (fx- col1 1)))
+
+  (define (read-token-near/fp str fp)
+    (let ([ip (open-input-string str)])
+      (let lp ([lt #f] [lv #f] [lb 0] [le 0])
         (let-values ([(type value bfp efp) (read-token ip)])
           (cond
            [(and (<= bfp fp) (< fp efp)) (values type value bfp efp)]

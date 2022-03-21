@@ -30,6 +30,8 @@
   (import
    (checkers)
    (chezscheme)
+   (cursor)
+   (doc)
    (indent)
    (json)
    (keywords)
@@ -157,114 +159,44 @@
        (trace-expr `(make-progress => ,(exit-reason->english reason)))
        #f]))
 
-  (define (get-symbol-name x)
-    (define (clean? s)
-      (let ([len (string-length s)])
-        (let lp ([i 0])
-          (cond
-           [(fx= i len) #t]
-           [(char-whitespace? (string-ref s i)) #f]
-           [else (lp (fx1+ i))]))))
-    (cond
-     [(gensym? x) (parameterize ([print-gensym #t]) (format "~s" x))]
-     [(symbol? x)
-      (let ([s (symbol->string x)])
-        (if (clean? s)
-            s
-            (format "|~a|" s)))]
-     [else x]))
+  (define (publish-diagnostics uri)
+    (rpc:fire-event "textDocument/publishDiagnostics"
+      (json:make-object
+       [uri uri]
+       [diagnostics (current-diagnostics)])))
 
-  (define (doc:start&link uri init-text progress)
-    (define-state-tuple <document> text worker-pid)
-    (define (init text)
-      `#(ok ,(<document> make
-               [text text]
-               [worker-pid
-                (if text
-                    (start-check text #t)
-                    (start-update-refs progress))])))
-    (define (terminate reason state) 'ok)
-    (define (handle-call msg from state)
-      (match msg
-        [get-text
-         `#(reply ,($state text) ,state)]
-        [#(get-value-near ,line ,char)
-         (let ([table (make-code-lookup-table ($state text))])
-           (match (try
-                   (let-values ([(type value bfp efp)
-                                 (read-token-near ($state text) table line char)])
-                     (and (eq? type 'atomic)
-                          (match value
-                            [,_ (guard (symbol? value))
-                             (get-symbol-name value)]
-                            [($primitive ,value)
-                             (get-symbol-name value)]
-                            [($primitive ,_ ,value)
-                             (get-symbol-name value)]
-                            [,_ #f]))))
-             [`(catch ,reason)
-              (trace-expr
-               `(get-value-near ,line ,char => ,(exit-reason->english reason)))
-              `#(reply #f ,state)]
-             ["" `#(reply #f ,state)]
-             [,result
-              `#(reply ,result ,state)]))]))
-    (define (handle-cast msg state)
-      (match msg
-        [#(updated ,text ,skip-delay?)
-         (let ([pid ($state worker-pid)])
-           (when pid (kill pid 'cancelled)))
-         `#(no-reply
-            ,($state copy
-               [text text]
-               [worker-pid (start-check text skip-delay?)]))]))
-    (define (handle-info msg state) (match msg))
-
-    (define (publish-diagnostics)
-      (rpc:fire-event "textDocument/publishDiagnostics"
-        (json:make-object
-         [uri uri]
-         [diagnostics (current-diagnostics)])))
-
-    (define (start-check text skip-delay?)
-      (spawn
-       (lambda ()
-         (unless skip-delay?
-           (receive (after 1000 'ok)))
+  (define (start-check uri cursor skip-delay?)
+    (spawn
+     (lambda ()
+       (unless skip-delay?
+         (receive (after 1000 'ok)))
+       (let ([text (cursor->string cursor)])
          (check uri text)
-         (publish-diagnostics)
+         (publish-diagnostics uri)
          (unless skip-delay?
            (receive (after 30000 'ok)))
          (check-line-whitespace text #t report)
-         (publish-diagnostics))))
+         (publish-diagnostics uri)))))
 
-    (define (start-update-refs progress)
-      (define pid
-        (spawn
-         (lambda ()
-           (with-gatekeeper-mutex $update-refs 'infinity
-             (let* ([filename (uri->abs-path uri)]
-                    [text (utf8->string (read-file filename))]
-                    [annotated-code (read-code text)]
-                    [source-table (make-code-lookup-table text)])
-               (do-update-refs uri text annotated-code source-table))))))
-      (when progress
-        (progress:inc-total progress)
-        (spawn
-         (lambda ()
-           (monitor pid)
-           (receive
-            [`(DOWN ,_ ,_ ,_)
-             (progress:inc-done progress)]))))
-      pid)
-
-    (gen-server:start&link #f init-text))
-
-  (define (doc:get-text who)
-    (gen-server:call who 'get-text))
-
-  (define (doc:get-value-near who line char)
-    (gen-server:call who `#(get-value-near ,line ,char)))
+  (define (start-update-refs uri progress)
+    (define pid
+      (spawn
+       (lambda ()
+         (with-gatekeeper-mutex $update-refs 'infinity
+           (let* ([filename (uri->abs-path uri)]
+                  [text (utf8->string (read-file filename))]
+                  [annotated-code (read-code text)]
+                  [source-table (make-code-lookup-table text)])
+             (do-update-refs uri text annotated-code source-table))))))
+    (when progress
+      (progress:inc-total progress)
+      (spawn
+       (lambda ()
+         (monitor pid)
+         (receive
+          [`(DOWN ,_ ,_ ,_)
+           (progress:inc-done progress)]))))
+    pid)
 
   (define current-diagnostics (make-process-parameter '()))
 
@@ -556,18 +488,25 @@
         [req->pid (ht:delete req->pid id)]
         [pid->req (ht:delete pid->req pid)]))
 
-    (define (updated uri text skip-delay? progress state)
-      (cond
-       [(ht:ref ($state uri->doc) uri #f) =>
-        (lambda (doc)
-          (gen-server:cast doc `#(updated ,text ,skip-delay?))
-          state)]
-       [else
-        (match-let*
-         ([#(ok ,pid)
-           (watcher:start-child 'main-sup (gensym "document") 1000
-             (lambda () (doc:start&link uri text progress)))])
-         ($state copy* [uri->doc (ht:set uri->doc uri pid)]))]))
+    (define (updated uri change skip-delay? progress state)
+      (define (doc-changed change cursor skip-delay?)
+        ;; called from inside doc gen-server process
+        (if change
+            (start-check uri cursor skip-delay?)
+            (start-update-refs uri progress)))
+      (let-values ([(doc state)
+                    (cond
+                     [(ht:ref ($state uri->doc) uri #f) =>
+                      (lambda (doc) (values doc state))]
+                     [else
+                      (match-let*
+                       ([#(ok ,pid)
+                         (watcher:start-child 'main-sup (gensym "document") 1000
+                           (lambda () (doc:start&link doc-changed)))])
+                       (values pid
+                         ($state copy* [uri->doc (ht:set uri->doc uri pid)])))])])
+        (doc:updated doc change skip-delay?)
+        state))
 
     (define (do-handle-request id method params state)
       (match (try (handle-request id method params state))
@@ -605,7 +544,7 @@
                   [textDocumentSync
                    (json:make-object
                     [openClose #t]
-                    [change 1]          ; Full
+                    [change 2]          ; Incremental
                     [willSave #f]
                     [willSaveWaitUntil #f]
                     [save (json:make-object [includeText #t])])]
@@ -716,7 +655,7 @@
         ["textDocument/didChange"
          (updated
           (json:get params '(textDocument uri))
-          (json:get (car (last-pair (json:get params 'contentChanges))) '(text))
+          (json:get params 'contentChanges)
           #f
           #f
           state)]
