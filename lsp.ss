@@ -605,9 +605,7 @@
                     [willSaveWaitUntil #f]
                     [save (json:make-object [includeText #t])])]
                   [hoverProvider #f]
-                  [completionProvider
-                   (json:make-object
-                    [resolveProvider #t])]
+                  [completionProvider #t]
                   [definitionProvider #t]
                   [referencesProvider #t]
                   [documentHighlightProvider #t]
