@@ -32,9 +32,9 @@
    (keywords)
    (progress)
    (read)
-   (software-info)
    (swish imports)
    (tower-client)
+   (trace)
    )
 
   (define (lsp:start-reader ip proc)
@@ -85,33 +85,6 @@
           [info 3]
           [log 4])]
        [message msg])))
-
-  (define (trace-expr expr)
-    (tower-client:log (format "~s" expr))
-    (pretty-print expr (trace-output-port))
-    (flush-output-port (trace-output-port))
-    expr)
-
-  (define (trace-msg msg)
-    (json:write-flat (trace-output-port) msg)
-    (newline (trace-output-port))
-    (flush-output-port (trace-output-port))
-    msg)
-
-  (define-syntax trace-time
-    (syntax-rules ()
-      [(_ $who e1 e2 ...)
-       (let ([who '$who]
-             [start (erlang:now)])
-         (call-with-values
-           (lambda () e1 e2 ...)
-           (lambda result
-             (let ([end (erlang:now)])
-               (pretty-print `(time ,who ,(- end start) ms)
-                 (trace-output-port))
-               (newline (trace-output-port))
-               (flush-output-port (trace-output-port))
-               (apply values result)))))]))
 
   (define (rpc:respond id result)
     (let ([res (json:make-object [jsonrpc "2.0"] [id id])])
@@ -466,7 +439,7 @@
            [end (if (zero? end-char)
                     (- end 1)
                     end)])
-      (trace-time indent
+      (trace-time 'indent
         (reverse
          (fold-indent (doc:get-text doc) '()
            (lambda (line old new acc)
@@ -707,7 +680,7 @@
                            "Analyze files"
                            (lambda (done total)
                              (format "~a/~a files" done total)))])
-           (trace-time enumerate-directories
+           (trace-time 'enumerate-directories
              (fold-left
               (lambda (state fn)
                 (updated (abs-path->uri fn) #f #t progress state))
@@ -744,7 +717,7 @@
 
   (define (lsp:start-server)
     (hook-console-input)
-    (trace-output-port (console-error-port))
+    (trace-init)
     ;; Manually build the whole app-sup-spec. No real need to manage a
     ;; log database or statistics gathering for the LSP client.
     (app-sup-spec
@@ -783,7 +756,7 @@
                        [`(EXIT ,_ ,_) (event-mgr:unregister)])))))
          permanent 1000 worker)
        ))
-    (fprintf (trace-output-port) "~a\n" (versions->string))
+    (trace-versions)
     (app:start)
     (receive))
   )

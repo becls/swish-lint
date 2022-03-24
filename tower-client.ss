@@ -166,16 +166,16 @@
                 [,_
                  (fprintf (console-error-port) "Unhandled Tower event\n")
                  (json:write (console-error-port) msg 0)
-                 (newline (trace-output-port))
-                 (flush-output-port (trace-output-port))
+                 (newline (console-error-port))
+                 (flush-output-port (console-error-port))
                  `#(no-reply ,state)])]
              [,id
               (match (ht:ref ($state id-map) id #f)
                 [#f
                  (fprintf (console-error-port) "Unexpected message\n")
                  (json:write (console-error-port) msg 0)
-                 (newline (trace-output-port))
-                 (flush-output-port (trace-output-port))
+                 (newline (console-error-port))
+                 (flush-output-port (console-error-port))
                  `#(no-reply ,state)]
                 [,from
                  (let ([reply (rpc-reply msg)]
