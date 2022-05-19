@@ -171,6 +171,23 @@
        (trace-expr `(make-progress => ,(exit-reason->english reason)))
        #f]))
 
+  (define (get-symbol-name x)
+    (define (clean? s)
+      (let ([len (string-length s)])
+        (let lp ([i 0])
+          (cond
+           [(fx= i len) #t]
+           [(char-whitespace? (string-ref s i)) #f]
+           [else (lp (fx1+ i))]))))
+    (cond
+     [(gensym? x) (parameterize ([print-gensym #t]) (format "~s" x))]
+     [(symbol? x)
+      (let ([s (symbol->string x)])
+        (if (clean? s)
+            s
+            (format "|~a|" s)))]
+     [else x]))
+
   (define (doc:start&link uri init-text progress)
     (define-state-tuple <document> text worker-pid)
     (define (init text)
@@ -193,11 +210,11 @@
                      (and (eq? type 'atomic)
                           (match value
                             [,_ (guard (symbol? value))
-                             (symbol->string value)]
+                             (get-symbol-name value)]
                             [($primitive ,value)
-                             (symbol->string value)]
+                             (get-symbol-name value)]
                             [($primitive ,_ ,value)
-                             (symbol->string value)]
+                             (get-symbol-name value)]
                             [,_ #f]))))
              [`(catch ,reason)
               (trace-expr
@@ -325,10 +342,6 @@
           [refs (make-hashtable string-hash string=?)])
       (define (key name line char)
         (format "~a:~a:~a" name line char))
-      (define (get-name name)
-        (if (symbol? name)
-            (symbol->string name)
-            name))
       (define (try-walk who walk code get-bfp meta)
         (match
          (try
@@ -336,7 +349,7 @@
             (lambda (table name source)
               (let-values ([(line char) (fp->line/char table (get-bfp source))])
                 (let ([new (json:make-object
-                            [name (get-name name)]
+                            [name (get-symbol-name name)]
                             [line line]
                             [char char]
                             [meta meta])])
