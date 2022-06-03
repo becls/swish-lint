@@ -394,8 +394,8 @@
        (catch (do-update-refs uri text annotated-code source-table)))))
 
   (define (get-completions doc uri line char)
-    (let ([line (+ line 1)]             ; LSP is 0-based
-          [char (+ char 1)])
+    (let ([line (+ line 1)]       ; LSP is 0-based
+          #;[char (+ char 1)])    ; ... but we want the preceding char
       (cond
        [(doc:get-value-near doc line char) =>
         (lambda (prefix)
