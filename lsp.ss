@@ -489,6 +489,8 @@
       client-cap
       requests
       )
+    (define shutdown-requested? #f)
+
     (define (init)
       `#(ok ,(<lsp-server> make
                [root-uri #f]
@@ -658,6 +660,7 @@
                `#(ok ,(indent-range doc range options) ,state))]
             [else `#(ok () ,state)]))]
         ["shutdown"
+         (set! shutdown-requested? #t)
          `#(ok #\nul ,state)]
         [,_
          (fprintf (console-error-port) "*** Unhandled message ***\n")
@@ -704,7 +707,7 @@
           #f
           state)]
         ["textDocument/didClose" state]
-        ["exit" (exit 0)]
+        ["exit" (app:shutdown (if shutdown-requested? 0 1))]
         [,_
          (fprintf (console-error-port) "*** Unhandled message ***\n")
          (trace-msg (json:make-object [method method] [params params]))
