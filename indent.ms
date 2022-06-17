@@ -754,6 +754,25 @@
     "(let f () ...))"))
   )
 
+(indent-mat call-with-values ()
+  (check-indent
+   (code
+    "(call-with-values"
+    "  (lambda () 12)"
+    "  (lambda (x) x))")
+   (code
+    "(call-with-values"
+    "(lambda () 12)"
+    "(lambda (x) x))"))
+  (check-indent
+   (code
+    "(call-with-values (lambda () 12)"
+    "                  (lambda (x) x))")
+   (code
+    "(call-with-values (lambda () 12)"
+    "(lambda (x) x))"))
+  )
+
 (indent-mat single-character-identifiers ()
   (for-each
    (lambda (id)
