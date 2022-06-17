@@ -685,7 +685,7 @@
                `#(ok ,(indent-range doc range options) ,state))]
             [else `#(ok () ,state)]))]
         ["shutdown"
-         `#(ok #f ,state)]
+         `#(ok #\nul ,state)]
         [,_
          (fprintf (console-error-port) "*** Unhandled message ***\n")
          (trace-msg (json:make-object [id id] [method method] [params params]))
