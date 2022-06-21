@@ -501,7 +501,6 @@ order by B.rank desc, B.count desc, A.name asc"
 
   (define (tower:start-server verbose tower-db)
     (verbosity (or verbose 0))
-    (base-dir (path-parent (app:path)))
     (log-file
      (cond
       [(not tower-db) ":memory:"]

@@ -745,7 +745,6 @@
   (define (lsp:start-server)
     (hook-console-input)
     (trace-output-port (console-error-port))
-    (base-dir (path-parent (app:path)))
     ;; Manually build the whole app-sup-spec. No real need to manage a
     ;; log database or statistics gathering for the LSP client.
     (app-sup-spec
