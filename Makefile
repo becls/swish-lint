@@ -23,7 +23,7 @@ test: all
 
 coverage: all
 	rm -f profile.data
-	swish-test --progress test --report mat-report.html --save-profile profile.data --coverage coverage.html .
+	swish-test --progress test --report mat-report.html --save-profile profile.data --coverage coverage.html --exclude 'testing/**' .
 
 lint: swish-lint${EXESUFFIX} ${SRC}
 	./swish-lint${EXESUFFIX} ${SRC}
@@ -52,4 +52,5 @@ clean:
 	rm -f git.revision
 	rm -f swish-lint${EXESUFFIX} swish-lint.boot
 	rm -f *.{so,mo,wpo,sop,ss.html}
+	rm -f testing/*.{so,mo,wpo,sop,ss.html}
 	rm -f profile.data coverage.html mat-report.html

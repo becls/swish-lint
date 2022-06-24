@@ -22,8 +22,10 @@
 
 (library (lsp)
   (export
+   lsp:read-loop
    lsp:start-server
    lsp:sup-spec
+   lsp:write-msg
    )
   (import
    (checkers)
@@ -38,19 +40,28 @@
    (trace)
    )
 
+  (define (lsp:read-loop ip proc)
+    (let lp ([header '()])
+      (let ([line (get-line ip)])
+        (if (string=? line "")
+            (lp header)
+            (match (pregexp-match (re "(\\S+): (\\S+)") line)
+              [(,_ ,key ,val) (lp (cons (cons key val) header))]
+              [#f
+               (proc (json:read ip))
+               (lp '())])))))
+
   (define (lsp:start-reader ip proc)
     `#(ok
        ,(spawn&link
          (lambda ()
-           (let lp ([header '()])
-             (let ([line (get-line ip)])
-               (if (string=? line "")
-                   (lp header)
-                   (match (pregexp-match (re "(\\S+): (\\S+)") line)
-                     [(,_ ,key ,val) (lp (cons (cons key val) header))]
-                     [#f
-                      (proc (json:read ip))
-                      (lp '())]))))))))
+           (lsp:read-loop ip proc)))))
+
+  (define (lsp:write-msg op msg)
+    (let* ([bv (json:object->bytevector msg)]
+           [str (utf8->string bv)])
+      (fprintf op "Content-Length: ~a\r\n\r\n" (bytevector-length bv))
+      (display-string str op)))
 
   (define (lsp:start-writer op)
     `#(ok
@@ -63,11 +74,8 @@
                 (flush-output-port op)
                 (lp 'infinity))
               [#(send-msg ,msg)
-               (let* ([bv (json:object->bytevector msg)]
-                      [str (utf8->string bv)])
-                 (fprintf op "Content-Length: ~a\r\n\r\n" (bytevector-length bv))
-                 (display-string str op)
-                 (lp 1))]))))))
+               (lsp:write-msg op msg)
+               (lp 1)]))))))
 
   (define (lsp:send msg)
     (unless (json:object? msg)
