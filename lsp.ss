@@ -71,7 +71,10 @@
   (define (lsp:send msg)
     (unless (json:object? msg)
       (bad-arg 'lsp:send msg))
-    (send 'lsp-writer `#(send-msg ,msg)))
+    (cond
+     [(whereis 'lsp-writer) =>
+      (lambda (pid)
+        (send pid `#(send-msg ,msg)))]))
 
   (define (lsp:log type msg)
     (unless (string? msg)
