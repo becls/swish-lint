@@ -83,33 +83,6 @@ In Emacs:
   [,x
     12]
   [#vu8(1 2 3)
-    13]
-  [(,abc .
-     ,def)
-    14])
-```
-
-The indenter:
-``` scheme
-(match x
-  [,x
-   12]
-  [#vu8(1 2 3)
-   13]
-  [(,abc .
-    ,def)
-   14])
-```
-
-### Lines that end in dot
-
-In Emacs:
-``` scheme
-(match x
-  [(,abc .
-     ,def)
-   12]
-  [#vu8(1 2 3)
     13])
 ```
 
@@ -120,6 +93,24 @@ The indenter:
    12]
   [#vu8(1 2 3)
    13])
+```
+
+### Lines that end in dot
+
+In Emacs:
+``` scheme
+(match x
+  [(,abc .
+     ,def)
+   12])
+```
+
+The indenter:
+``` scheme
+(match x
+  [(,abc .
+    ,def)
+   12])
 ```
 
 ### Named Let
