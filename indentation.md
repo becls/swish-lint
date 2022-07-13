@@ -27,8 +27,8 @@ Default Emacs configurations use a `fill-column` of 70. Doom Emacs
 defaults this to 80 without being explicitly set in the user's
 configuration. This code uses 70.
 
-The following examples attempt to express the differences between
-Emacs's style and this indentation code.
+The following examples attempt to express the differences between the
+stock Emacs 27.2 configuration and this indentation code.
 
 ### Block comments `#| ... |#`
 
@@ -41,12 +41,52 @@ little importance.
 The indenter applies its normal code indentation strategy for datum
 comments `#;`.
 
+### Head subforms
+
+In Emacs:
+``` scheme
+(f e1
+   e2
+   e3)
+
+(foo e1
+     e2
+     e3)
+```
+
+The indenter opts for two spaces. For the `f` case, this seems less
+pleasing, but has the advantage that the subsequent forms will remain
+at the same level if `f` is renamed.
+``` scheme
+(f e1
+  e2
+  e3)
+
+(foo e1
+  e2
+  e3)
+```
+
+In Emacs most mathematical operators and single-character identifiers
+work as expected. To achieve similar results, the indenter overrides
+its default behavior for `+`, `-`, `*`, `/`, `!`, `@`, `$`, `%`, `^`,
+`&`, `:`, `?`, `~`, and `_`. Both indent like this:
+``` scheme
+(+ e1
+   e2
+   e3)
+
+(@ e1
+   e2
+   e3)
+```
+
 ### Certain bytevectors
 
 In Emacs:
 ``` scheme
 #vu8(#x01 #x02 #x03
-      #x04 #x05 #x06)
+          #x04 #x05 #x06)
 ```
 
 The indenter:
@@ -80,10 +120,10 @@ The indenter:
 In Emacs:
 ``` scheme
 (match x
-  [,x
-    12]
-  [#vu8(1 2 3)
-    13])
+       [,x
+        12]
+       [#vu8(1 2 3)
+            13])
 ```
 
 The indenter:
@@ -100,9 +140,9 @@ The indenter:
 In Emacs:
 ``` scheme
 (match x
-  [(,abc .
-     ,def)
-   12])
+       [(,abc .
+              ,def)
+        12])
 ```
 
 The indenter:
