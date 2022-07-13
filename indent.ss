@@ -555,6 +555,7 @@
      1]
     ;; Manual updates to style
     [(call-with-values) 0]
+    [(! @ $ % ^ & : ? ~ _) scheme-normal-indent]
     )
 
   (define (emit-whitespace op n)

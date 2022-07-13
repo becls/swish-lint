@@ -754,6 +754,55 @@
     "(let f () ...))"))
   )
 
+(indent-mat single-character-identifiers ()
+  (for-each
+   (lambda (id)
+     (check-indent
+      (code
+       (format "(~a" id)
+       " test1"
+       " test2"
+       " test3)")
+      (code
+       (format "(~a" id)
+       "test1"
+       "test2"
+       "test3)"))
+     (check-indent
+      (code
+       (format "(~a test1" id)
+       "  test2"
+       "  test3)")
+      (code
+       (format "(~a test1" id)
+       "test2"
+       "test3)")))
+   '("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m"
+     "n" "o" "p" "q" "r" "s" "t" "u" "v" "w" "x" "y" "z"))
+  (for-each
+   (lambda (id)
+     (check-indent
+      (code
+       (format "(~a" id)
+       " test1"
+       " test2"
+       " test3)")
+      (code
+       (format "(~a" id)
+       "test1"
+       "test2"
+       "test3)"))
+     (check-indent
+      (code
+       (format "(~a test1" id)
+       "   test2"
+       "   test3)")
+      (code
+       (format "(~a test1" id)
+       "test2"
+       "test3)")))
+   '("!" "@" "$" "%" "^" "&" ":" "?" "~" "_" "*" "/" "+" "-")))
+
 ;; This header is handy in Emacs with column-number-mode to look
 ;; closely at alignment.
 (define align-header
