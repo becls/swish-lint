@@ -37,7 +37,7 @@
         (lambda (fn)
           (warningf 'software-info.ss "file ~s not found at compile time" fn)
           #f)))
-    (software-version key "1.2.0"))
+    (software-version key "1.3.0"))
 
   (define (output-version op key)
     (fprintf op "~11@a~@[ ~a~]~@[ (~a)~]\n"
