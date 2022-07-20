@@ -32,6 +32,19 @@
           (assert (>= percentage prior))
           (lp percentage)]))])))
 
+(define (capture-test-sync)
+  (let ([me self])
+    (spawn
+     (lambda ()
+       (event-mgr:add-handler
+        (lambda (event)
+          (match event
+            [(test-sync . ,_) (send me event)]
+            [,_ #f])))
+       (receive))))
+  (lambda (uri)
+    (receive [(test-sync . ,@uri) 'ok])))
+
 (define (start-lsp-server path)
   (define-values (ip1 op1) (make-pipe "pipe1"))
   (define-values (ip2 op2) (make-pipe "pipe2"))

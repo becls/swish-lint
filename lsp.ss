@@ -373,7 +373,8 @@
       (or (defns-anno) (defns-re))
       (or (refs-anno) (refs-re))
       (tower-client:update-references filename
-        (vector->list (hashtable-values refs)))))
+        (vector->list (hashtable-values refs)))
+      (event-mgr:notify (cons 'test-sync uri))))
 
   (define (spawn-update-refs uri annotated-code source-table text)
     (spawn&link
@@ -747,7 +748,10 @@
       #(tower-log
         ,(lambda ()
            (match (event-mgr:set-log-handler
-                   (lambda (e) (tower-client:log (coerce e)))
+                   (lambda (e)
+                     (match e
+                       [(test-sync . ,_) #f]
+                       [,_ (tower-client:log (coerce e))]))
                    (whereis 'tower-client))
              [ok
               (event-mgr:flush-buffer)
