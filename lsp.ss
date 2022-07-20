@@ -581,7 +581,8 @@
         ["initialize"
          ;;(trace-msg (json:make-object [method method] [params params]))
          (let* ([root-uri (json:get params '(rootUri))]
-                [root-dir (uri->abs-path root-uri)]
+                [root-uri (and (string? root-uri) root-uri)]
+                [root-dir (and root-uri (uri->abs-path root-uri))]
                 [client-cap (json:get params '(capabilities))])
            (tower-client:reset-directory root-dir)
            `#(ok
@@ -682,16 +683,20 @@
                (delete-req id pid state))]
             [else state]))]
         ["initialized"
-         (let ([progress (make-progress "enumerate-directories"
-                           "Analyze files"
-                           (lambda (done total)
-                             (format "~a/~a files" done total)))])
-           (trace-time 'enumerate-directories
-             (fold-left
-              (lambda (state fn)
-                (updated (abs-path->uri fn) #f #t progress state))
-              state
-              (find-files ($state root-dir) "ss" "ms"))))]
+         (cond
+          [($state root-dir) =>
+           (lambda (dir)
+             (let ([progress (make-progress "enumerate-directories"
+                               "Analyze files"
+                               (lambda (done total)
+                                 (format "~a/~a files" done total)))])
+               (trace-time 'enumerate-directories
+                 (fold-left
+                  (lambda (state fn)
+                    (updated (abs-path->uri fn) #f #t progress state))
+                  state
+                  (find-files dir "ss" "ms")))))]
+          [else state])]
         ["textDocument/didOpen"
          (let ([doc (json:get params '(textDocument))])
            (updated (json:get doc '(uri)) (json:get doc '(text)) #t #f state))]
