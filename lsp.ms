@@ -1,4 +1,5 @@
 (import
+ (checkers)
  (json)
  (lsp)
  (software-info)
@@ -49,6 +50,20 @@
        (receive))))
   (lambda (uri)
     (receive [(test-sync . ,@uri) 'ok])))
+
+(define (capture-diagnostics)
+  (define-tuple <diagnostics> uri diagnostics)
+  (rpc-client:set-event-handler 'rpc 'diagnostics
+    (lambda (event)
+      (and (equal? (json:ref event 'method #f) "textDocument/publishDiagnostics")
+           (let ([params (json:get event 'params)])
+             (<diagnostics> make
+               [uri (json:get params 'uri)]
+               [diagnostics (json:get params 'diagnostics)]))))
+    self)
+  (lambda (uri timeout)
+    (receive (after timeout #f)
+      [`(<diagnostics> ,@uri ,diagnostics) diagnostics])))
 
 (define (start-lsp-server path)
   (define-values (ip1 op1) (make-pipe "pipe1"))
@@ -512,6 +527,66 @@
          'ok)
 
         (for-each did-close uris)
+        'ok))))
+
+(isolate-mat diagnostics ()
+  (define (extract-diagnostics ls)
+    (map
+     (lambda (obj)
+       (list* (json:get obj 'message)
+         (json:get obj 'severity)
+         (extract-range (json:get obj 'range))))
+     ls))
+  (let ([rpc (start-lsp-server (get-real-path "."))])
+    (on-exit (stop-lsp-server rpc)
+      (define wait-for-test-sync (capture-test-sync))
+      (define wait-for-diagnostics (capture-diagnostics))
+      (define (flush-diagnostics uri)
+        (when (wait-for-diagnostics uri 100)
+          (flush-diagnostics uri)))
+      (let ([uri "file:///tmp/foo.ss"])
+        (did-open uri "")
+        (wait-for-test-sync uri)
+        (flush-diagnostics uri)
+
+        ;; checks report handling of line
+        (did-change uri "(")
+        (match (extract-diagnostics (wait-for-diagnostics uri 5000))
+          [(("unexpected end-of-file reading list" 1 from 0 0 to 1 0))
+           (flush-diagnostics uri)])
+
+        ;; checks report handling of range
+        (parameterize ([optional-checkers
+                        (list
+                         (make-regexp-checker 'info "INFO.*")
+                         (make-regexp-checker 'warning "WARNING.*")
+                         (make-regexp-checker 'error "ERROR.*"))])
+          (did-change uri
+            (code
+             "(let ()"
+             "  body   ; INFO: informative"
+             "  body   ; WARNING: be careful"
+             "  body   ; ERROR: this is broken"
+             "  body)"))
+          (match (extract-diagnostics (wait-for-diagnostics uri 5000))
+            [(("ERROR: this is broken" 1 from 3 11 to 3 32)
+              ("WARNING: be careful" 2 from 2 11 to 2 30)
+              ("INFO: informative" 3 from 1 11 to 1 28))
+             (flush-diagnostics uri)]))
+
+        ;; checks report handling of annotation
+        (did-change uri
+          (code
+           "(import"
+           "  (omega)"
+           "  (alpha))"))
+        (match (extract-diagnostics (wait-for-diagnostics uri 5000))
+          [(("incorrectly sorted: (alpha)" 3 from 2 2 to 2 9)
+            ("incorrectly sorted: (omega)" 3 from 1 2 to 1 9)
+            ("should sort imports" 2 from 0 1 to 0 7))
+           (flush-diagnostics uri)])
+
+        (did-close uri)
         'ok))))
 
 (isolate-mat formatting ()
