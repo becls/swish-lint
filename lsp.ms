@@ -171,6 +171,40 @@
         (json:make-object
          [uri uri])])])))
 
+(define (format-document uri)
+  (rpc-client:call 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/formatting"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [options (json:make-object)])])))
+
+(define (format-range uri start-line0 start-char0 end-line0 end-char0)
+  (rpc-client:call 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/rangeFormatting"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [options (json:make-object)]
+       [range
+        (json:make-object
+         [start
+          (json:make-object
+           [line start-line0]
+           [character start-char0])]
+         [end
+          (json:make-object
+           [line end-line0]
+           [character end-char0])])])])))
+
 (define (get-completions uri line0 char0)
   (rpc-client:call 'rpc
     (json:make-object
@@ -478,4 +512,59 @@
          'ok)
 
         (for-each did-close uris)
+        'ok))))
+
+(isolate-mat formatting ()
+  (define (extract-edits ls)
+    (map
+     (lambda (obj)
+       (list (json:get obj 'newText)
+         (extract-range (json:get obj 'range))))
+     ls))
+  (let ([rpc (start-lsp-server (get-real-path "."))])
+    (on-exit (stop-lsp-server rpc)
+      (define wait-for-test-sync (capture-test-sync))
+
+      (assert (null? (format-document "file:///tmp/does-not-exist.ss")))
+      (assert (null? (format-range "file:///tmp/does-not-exist.ss" 0 0 1 0)))
+      (let ([uri "file:///tmp/foo.ss"])
+        (did-open uri
+          (code
+           "(define (add2 x)"
+           "(let ([y 1]"
+           "[z 1])"
+           "(+ x y z)))"))
+        (wait-for-test-sync uri)
+
+        ;; In this test we ask for reformatting, but we don't actually
+        ;; apply the edits. The server's state of the code remains
+        ;; unchanged.
+        (match-let*
+         ([,line3 '("    (+ x y z)))" (from 3 0 to 3 15))]
+          [() (extract-edits (format-range uri 3 0 3 0))]
+          [(,@line3) (extract-edits (format-range uri 3 0 3 1))]
+          [(,@line3) (extract-edits (format-range uri 3 0 3 15))]
+          [(,@line3) (extract-edits (format-range uri 3 0 4 0))]
+
+          [,line2 '("        [z 1])" (from 2 0 to 2 14))]
+          [() (extract-edits (format-range uri 2 0 2 0))]
+          [(,@line2) (extract-edits (format-range uri 2 0 2 1))]
+          [(,@line2) (extract-edits (format-range uri 2 0 2 14))]
+          [(,@line2) (extract-edits (format-range uri 2 0 3 0))]
+
+          [(,@line2 ,@line3) (extract-edits (format-range uri 2 0 4 0))]
+
+          [,line1 '("  (let ([y 1]" (from 1 0 to 1 13))]
+          [() (extract-edits (format-range uri 1 0 1 0))]
+          [(,@line1) (extract-edits (format-range uri 1 0 1 1))]
+          [(,@line1) (extract-edits (format-range uri 1 0 1 13))]
+          [(,@line1) (extract-edits (format-range uri 1 0 2 0))]
+
+          [(,@line1 ,@line2) (extract-edits (format-range uri 1 0 3 0))]
+          [(,@line1 ,@line2 ,@line3) (extract-edits (format-range uri 1 0 4 0))]
+
+          [(,@line1 ,@line2 ,@line3) (extract-edits (format-document uri))])
+         'ok)
+
+        (did-close uri)
         'ok))))
