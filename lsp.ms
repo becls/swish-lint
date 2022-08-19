@@ -103,6 +103,71 @@
           [`(DOWN ,_ ,@pid ,_) 'ok])))]
    [else 'ok]))
 
+(define (did-open uri text)
+  (rpc-client:notify 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/didOpen"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri]
+         [text text])])])))
+
+(define (did-change uri text)
+  (rpc-client:notify 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/didChange"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [contentChanges
+        (list
+         (json:make-object
+          [text text]))])])))
+
+(define (did-save uri text)
+  (rpc-client:notify 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/didSave"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [text text])])))
+
+(define (did-close uri)
+  (rpc-client:notify 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/didClose"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])])])))
+
+(define (get-completions uri line0 char0)
+  (rpc-client:call 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/completion"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [position
+        (json:make-object
+         [line line0]
+         [character char0])])])))
+
 (isolate-mat no-root-folder ()
   (let ([rpc (start-lsp-server #f)])
     (on-exit (stop-lsp-server rpc)
@@ -112,3 +177,63 @@
   (let ([rpc (start-lsp-server (get-real-path "."))])
     (on-exit (stop-lsp-server rpc)
       'ok)))
+
+(isolate-mat completions ()
+  (define (extract-labels ls)
+    (map (lambda (obj) (json:ref obj 'label #f)) ls))
+
+  (define (all uri str expect)
+    (did-change uri str)
+    (let ([max (string-length str)])
+      (let lp ([n 0] [expect expect])
+        (cond
+         [(> n max) (assert (null? expect))]
+         [else
+          (let ([actual (extract-labels (get-completions uri 0 n))])
+            (match expect
+              [() (throw `#(not-enough-expected actual: ,actual))]
+              [(,exp . ,rest)
+               (unless (equal? actual exp)
+                 (printf "~a: ~a\n" actual exp)
+                 (throw `#(failed ,actual ,exp)))
+               (lp (+ n 1) rest)]))]))))
+
+  ;; TODO: This needs to be more robust in the presence of stray files
+  ;; in the testing directory. Possibly need to create a separate
+  ;; directory and write code into it instead of using swish-lint's
+  ;; directory.
+  (let ([rpc (start-lsp-server (get-real-path "."))])
+    (on-exit (stop-lsp-server rpc)
+      (assert (null? (get-completions "file:///tmp/does-not-exist.ss" 0 0)))
+      (let ([uri "file:///tmp/foo.ss"])
+        (did-open uri "")
+        (all uri "1" '(() ()))
+        (all uri "()" '(() () ()))
+        (all uri "(1)" '(() () () ()))
+        (all uri "(z)" '(() () ("zero?") ()))
+        (all uri "(ze)" '(() () ("zero?") ("zero?") ()))
+        (all uri "(zed)" '(() () () () () ()))
+        (all uri "(#)" '(() () () ()))
+        (all uri "(#%)" '(() () () () ()))
+        (all uri "(#%z)" '(() () ("zero?") ("zero?") ("zero?") ()))
+        (all uri "(#%ze)" '(() () ("zero?") ("zero?") ("zero?") ("zero?") ()))
+        (all uri "(#%zed)" '(() () () () () () () ()))
+        (all uri "(#2%z)" '(() () ("zero?") ("zero?") ("zero?") ("zero?") ()))
+        (all uri "(#2%ze)" '(() () ("zero?") ("zero?") ("zero?") ("zero?") ("zero?") ()))
+        (all uri "(#2%zed)" '(() () () () () () () () ()))
+
+        ;; Completions should not include the identifier under the
+        ;; cursor when it's the only reference.
+        ;;
+        ;; Completions don't include the current non-keyword
+        ;; identifiers until the file is saved.
+        (match-let*
+         ([,_ (did-save uri "(let ([zyx")]
+          [() (extract-labels (get-completions uri 0 10))]
+          [,_ (did-save uri "(let ([zyx 12]) (+ z 12))")]
+          [("zyx" "zero?") (extract-labels (get-completions uri 0 20))]
+          [,_ (did-save uri "(let ([zyx 12]) (+ zyx 12))")]
+          [("zyx") (extract-labels (get-completions uri 0 22))])
+         'ok)
+        (did-close uri)
+        'ok))))
