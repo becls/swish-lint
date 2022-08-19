@@ -9,6 +9,11 @@
 
 (software-info:install)
 
+(define-syntax code
+  (syntax-rules ()
+    [(_ str ...)
+     (ct:join #\newline str ...)]))
+
 (define (capture-progress)
   (define-tuple <progress> token kind message percentage)
   (rpc-client:set-event-handler 'rpc 'progress
@@ -181,6 +186,51 @@
          [line line0]
          [character char0])])])))
 
+(define (get-definitions uri line0 char0)
+  (rpc-client:call 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/definition"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [position
+        (json:make-object
+         [line line0]
+         [character char0])])])))
+
+(define (get-highlights uri line0 char0)
+  (rpc-client:call 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/documentHighlight"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [position
+        (json:make-object
+         [line line0]
+         [character char0])])])))
+
+(define (get-references uri line0 char0)
+  (rpc-client:call 'rpc
+    (json:make-object
+     [jsonrpc "2.0"]
+     [method "textDocument/references"]
+     [params
+      (json:make-object
+       [textDocument
+        (json:make-object
+         [uri uri])]
+       [position
+        (json:make-object
+         [line line0]
+         [character char0])])])))
+
 (isolate-mat no-root-folder ()
   (let ([rpc (start-lsp-server #f)])
     (on-exit (stop-lsp-server rpc)
@@ -249,4 +299,183 @@
           [("zyx") (extract-labels (get-completions uri 0 22))])
          'ok)
         (did-close uri)
+        'ok))))
+
+(define (extract-range r)
+  (list
+   'from
+   (json:get r '(start line))
+   (json:get r '(start character))
+   'to
+   (json:get r '(end line))
+   (json:get r '(end character))))
+
+(isolate-mat defns/refs ()
+  (define (extract-ranges ls)
+    (map
+     (lambda (obj)
+       (list* (json:ref obj 'uri #f)
+         (extract-range (json:get obj 'range))))
+     ls))
+  (define (get-defns uri line0 char0)
+    (extract-ranges (get-definitions uri line0 char0)))
+  (define (get-refs uri line0 char0)
+    (extract-ranges (get-references uri line0 char0)))
+  (define (get-local-refs uri line0 char0)
+    ;; For sanity, slam the uri into the extracted ranges
+    (map
+     (lambda (ls)
+       (assert (eq? (car ls) #f))
+       (cons uri (cdr ls)))
+     (extract-ranges (get-highlights uri line0 char0))))
+
+  (define (check-range range f)
+    ;; All calls f within the range should be the same. Calls outside
+    ;; the range should be different.
+    (match range
+      [(,uri from ,sl ,sc to ,el ,ec)
+       (let ([r (f uri sl sc)])
+         (when (not (null? r))
+           (assert (not (equal? r (f uri sl (- sc 1))))))
+         (do ([c (+ sc 1) (+ c 1)]) ((= c ec))
+           (assert (equal? r (f uri sl c))))
+         (when (not (null? r))
+           (assert (not (equal? r (f uri sl (+ ec 1))))))
+         r)]))
+
+  (let ([rpc (start-lsp-server (get-real-path "."))])
+    (on-exit (stop-lsp-server rpc)
+      (define wait-for-test-sync (capture-test-sync))
+
+      (assert (null? (get-defns "file:///tmp/does-not-exist.ss" 0 0)))
+      (assert (null? (get-local-refs "file:///tmp/does-not-exist.ss" 0 0)))
+      (assert (null? (get-refs "file:///tmp/does-not-exist.ss" 0 0)))
+      (let* ([uri1 "file:///tmp/file1.ss"]
+             [uri2 "file:///tmp/file2.ss"]
+             [uris (list uri1 uri2)])
+        (for-each
+         (lambda (uri) (did-open uri ""))
+         uris)
+        (for-each wait-for-test-sync uris)
+        (did-change uri1
+          (code
+           "(define foo 12)"
+           "(define bar 13)"
+           "(define baz (+ foo bar))"
+           "(define #{g0 irkaa9foht6pk4yacg2xmr1pt-0} 14)"
+           "(define |nonstandard symbol| 15)"
+           ))
+        (did-change uri2
+          (code
+           "(let ([sum (+ foo bar baz)])"
+           "  sum)"
+           "(let ([prod (* #{g0 irkaa9foht6pk4yacg2xmr1pt-0} |nonstandard symbol|)])"
+           "  prod)"
+           ))
+        (for-each wait-for-test-sync uris)
+
+        (match-let*
+         ([,foo-defn `(,uri1 from 0 8 to 0 11)]
+          [,bar-defn `(,uri1 from 1 8 to 1 11)]
+          [,baz-defn `(,uri1 from 2 8 to 2 11)]
+          [,foo-ref1 `(,uri1 from 2 15 to 2 18)]
+          [,bar-ref1 `(,uri1 from 2 19 to 2 22)]
+          [,gen-defn `(,uri1 from 3 8 to 3 41)]
+          [,nss-defn `(,uri1 from 4 8 to 4 28)]
+
+          [,sum-ref1 `(,uri2 from 0 7 to 0 10)]
+          [,foo-ref2 `(,uri2 from 0 14 to 0 17)]
+          [,bar-ref2 `(,uri2 from 0 18 to 0 21)]
+          [,baz-ref2 `(,uri2 from 0 22 to 0 25)]
+          [,sum-ref2 `(,uri2 from 1 2 to 1 5)]
+
+          [,prod-ref1 `(,uri2 from 2 7 to 2 11)]
+          [,gen-ref1  `(,uri2 from 2 15 to 2 48)]
+          [,nss-ref1  `(,uri2 from 2 49 to 2 69)]
+          [,prod-ref2 `(,uri2 from 3 2 to 3 6)]
+
+          ;; foo
+          [(,@foo-defn) (check-range foo-defn get-defns)]
+          [(,@foo-defn ,@foo-ref1) (check-range foo-defn get-local-refs)]
+          [(,@foo-ref2) (check-range foo-ref2 get-local-refs)]
+          [(,@foo-defn ,@foo-ref1 ,@foo-ref2) (check-range foo-defn get-refs)]
+
+          ;; 12
+          [() (get-defns uri1 0 12)]
+
+          ;; bar
+          [(,@bar-defn) (check-range bar-defn get-defns)]
+          [(,@bar-defn ,@bar-ref1) (check-range bar-defn get-local-refs)]
+          [(,@bar-ref2) (check-range bar-ref2 get-local-refs)]
+          [(,@bar-defn ,@bar-ref1 ,@bar-ref2) (check-range bar-defn get-refs)]
+
+          ;; 13
+          [() (get-defns uri1 1 12)]
+
+          ;; baz
+          [(,@baz-defn) (check-range baz-defn get-defns)]
+          [(,@baz-defn) (check-range baz-defn get-local-refs)]
+          [(,@baz-ref2) (check-range baz-ref2 get-local-refs)]
+          [(,@baz-defn ,@baz-ref2) (check-range baz-defn get-refs)]
+
+          [(,@foo-defn) (check-range foo-ref1 get-defns)]
+          [(,@bar-defn) (check-range bar-ref1 get-defns)]
+
+          ;; gensym
+          [(,@gen-defn) (check-range gen-defn get-defns)]
+          [(,@gen-defn) (check-range gen-defn get-local-refs)]
+          [(,@gen-ref1) (check-range gen-ref1 get-local-refs)]
+          [(,@gen-defn ,@gen-ref1) (check-range gen-defn get-refs)]
+
+          ;; nonstandard symbol
+          [(,@nss-defn) (check-range nss-defn get-defns)]
+          [(,@nss-defn) (check-range nss-defn get-local-refs)]
+          [(,@nss-ref1) (check-range nss-ref1 get-local-refs)]
+          [(,@nss-defn ,@nss-ref1) (check-range nss-defn get-refs)]
+
+          [() (check-range sum-ref1 get-defns)] ; currently let bindings are not defns
+          [() (check-range sum-ref2 get-defns)] ; currently let bindings are not defns
+          [(,@foo-defn) (check-range foo-ref2 get-defns)]
+          [(,@bar-defn) (check-range bar-ref2 get-defns)]
+          [(,@baz-defn) (check-range baz-ref2 get-defns)]
+          [() (check-range prod-ref1 get-defns)] ; currently let bindings are not defns
+          [() (check-range prod-ref2 get-defns)] ; currently let bindings are not defns
+          [(,@gen-defn) (check-range gen-ref1 get-defns)]
+          [(,@nss-defn) (check-range nss-ref1 get-defns)])
+         'ok)
+
+        (did-change uri1
+          (code
+           "(define-syntax (define-thing x)"
+           "  (syntax-case x ()"
+           "   [(_) #'(begin 'thing)]))"
+           ""
+           "x"
+           ))
+        (wait-for-test-sync uri1)
+        (match-let*
+         ([,define-thing-defn `(,uri1 from 0 16 to 0 28)]
+          [,x-defn `(,uri1 from 0 29 to 0 30)]
+          [(,@define-thing-defn) (check-range define-thing-defn get-defns)]
+          [(,@x-defn) (check-range x-defn get-defns)]
+          ;; The current code incorrectly determines (define-thing x)
+          ;; is the definition of `x`. A future implementation may
+          ;; treat `x` as a local definition, and the following test
+          ;; result would change.
+          [(,@x-defn) (get-defns uri1 4 0)])
+         'ok)
+
+        ;; If we ever decide to treat marks as definitions, the test
+        ;; results here would change.
+        (did-change uri1
+          (code "(list #0=0 #1=1 #1# #0#)"))
+        (wait-for-test-sync uri1)
+        (match-let*
+         ([() (get-defns uri1 0 6)]
+          [() (get-defns uri1 0 11)]
+          [() (get-defns uri1 0 16)]
+          [() (get-defns uri1 0 20)])
+         'ok)
+
+        (for-each did-close uris)
         'ok))))

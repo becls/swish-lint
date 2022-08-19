@@ -60,10 +60,16 @@
   (define (abs-path->uri path)
     (meta-cond
      [windows?
-      (string-append "file:///"
-        (string-downcase (substring path 0 1))
-        "%3A"
-        (substring path 2 (string-length path)))]
+      (match (pregexp-match (re "^([A-Za-z]):(.*)") path)
+        [#f
+         ;; When testing it is useful to support Unix paths.
+         (string-append "file://"
+           (pregexp-replace* (re "\\\\") path "/"))]
+        [(,_ ,drive ,filename)
+         (string-append "file:///"
+           (string-downcase drive)
+           "%3A"
+           (pregexp-replace* (re "\\\\") filename "/"))])]
      [else
       (string-append "file://" path)]))
 
