@@ -67,7 +67,7 @@
      [else
       (string-append "file://" path)]))
 
-  (define (tower-client:start&link)
+  (define (tower-client:start&link port-number)
     (define-state-tuple <tower-client>
       ws
       id
@@ -75,7 +75,7 @@
       sync-token
       )
     (define (try-connect state)
-      (match (try (ws:connect "localhost" 51342 "/tower" self))
+      (match (try (ws:connect "localhost" port-number "/tower" self))
         [`(catch ,_) #f]
         [,ws
          (sync ws state)

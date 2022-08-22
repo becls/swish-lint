@@ -730,8 +730,12 @@
   (define (lsp-server:incoming-message msg)
     (gen-server:call 'lsp-server `#(incoming-message ,msg)))
 
-  (define (lsp:sup-spec ip op ignore-lhe?)
-    `(#(tower-client ,tower-client:start&link permanent 1000 worker)
+  (define (lsp:sup-spec port-number ip op ignore-lhe?)
+    `(#(tower-client
+        ,(lambda ()
+           (tower-client:start&link
+            (or port-number (http:get-port-number 'http))))
+        permanent 1000 worker)
       #(tower-log
         ,(lambda ()
            (match (event-mgr:set-log-handler
@@ -753,14 +757,14 @@
         ,(lambda () (lsp:start-reader ip lsp-server:incoming-message))
         permanent 1000 worker)))
 
-  (define (lsp:start-server ip op)
+  (define (lsp:start-server port-number ip op)
     (trace-init)
     ;; Manually build the whole app-sup-spec. No real need to manage a
     ;; log database or statistics gathering for the LSP client.
     (app-sup-spec
      `(#(event-mgr ,event-mgr:start&link permanent 1000 worker)
        #(gatekeeper ,gatekeeper:start&link permanent 1000 worker)
-       ,@(lsp:sup-spec ip op #f)
+       ,@(lsp:sup-spec port-number ip op #f)
        #(event-mgr-sentry               ; Should be last
          ,(lambda ()
             `#(ok ,(spawn&link

@@ -436,9 +436,9 @@ order by B.rank desc, B.count desc, A.name asc"
   (define (ui:num-clients)
     (gen-server:call 'ui 'num-clients))
 
-  (define (tower:running?)
+  (define (tower:running? port-number)
     (match (try
-            (let-values ([(ip op) (connect-tcp "localhost" 51342)])
+            (let-values ([(ip op) (connect-tcp "localhost" port-number)])
               (close-port op)))
       [`(catch ,reason) #f]
       [,_ #t]))
@@ -557,14 +557,14 @@ order by B.rank desc, B.count desc, A.name asc"
               (ws:upgrade conn request (spawn&link client))]
              [,_ #f])))))
 
-  (define (tower:start-server verbose tower-db)
+  (define (tower:start-server verbose tower-db port-number)
     (verbosity (or verbose 0))
     (log-file
      (cond
       [(not tower-db) ":memory:"]
       [(path-absolute? tower-db) tower-db]
       [else (path-combine (base-dir) tower-db)]))
-    (app-sup-spec (append (app-sup-spec) (tower:sup-spec 51342)))
+    (app-sup-spec (append (app-sup-spec) (tower:sup-spec port-number)))
     (app:start)
     (receive))
   )

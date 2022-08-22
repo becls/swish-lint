@@ -34,6 +34,8 @@
  (tower)
  (tower-client))
 
+(define tower-port-number 51342)
+
 (define cli
   (cli-specs
    default-help
@@ -81,25 +83,25 @@
     (exit 0)]
    [(opt 'lsp)
     (optional-checkers (make-optional-passes opt))
-    (lsp:start-server)]
+    (lsp:start-server tower-port-number (console-input-port) (console-output-port))]
    [(opt 'tower)
     (let ([verbose (opt 'verbose)]
           [tower-db (opt 'tower-db)])
       (cond
-       [(not (tower:running?))
-        (tower:start-server verbose tower-db)]
+       [(not (tower:running? tower-port-number))
+        (tower:start-server verbose tower-db tower-port-number)]
        [verbose
-        (match-let* ([#(ok ,pid) (tower-client:start&link)])
+        (match-let* ([#(ok ,pid) (tower-client:start&link tower-port-number)])
           (unlink pid)
           (tower-client:shutdown-server)
           (kill pid 'shutdown))
         (let lp ([n 1])
           (receive (after 200 'ok))
           (cond
-           [(not (tower:running?)) 'ok]
+           [(not (tower:running? tower-port-number)) 'ok]
            [(< n 10) (lp (+ n 1))]
            [else (errorf #f "Tower is still running.")]))
-        (tower:start-server verbose tower-db)]
+        (tower:start-server verbose tower-db tower-port-number)]
        [else
         (errorf #f "Tower is already running.")]))]
    [(opt 'update-keywords)
@@ -108,7 +110,7 @@
             (lambda (reason)
               (fprintf (console-error-port) "~a\n" (exit-reason->english reason))
               (flush-output-port (console-error-port))))])
-      (match-let* ([#(ok ,pid) (tower-client:start&link)])
+      (match-let* ([#(ok ,pid) (tower-client:start&link tower-port-number)])
         (unlink pid)
         (tower-client:update-keywords keywords)))]
    [(and (opt 'indent) (not (null? files)))
