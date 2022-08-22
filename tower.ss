@@ -25,6 +25,7 @@
   (export
    tower:running?
    tower:start-server
+   tower:sup-spec
    )
   (import
    (chezscheme)
@@ -503,6 +504,59 @@ order by B.rank desc, B.count desc, A.name asc"
        'ignore]
       [,error error]))
 
+  (define (tower:sup-spec port-number)
+    `(#(tower-db:setup ,tower-db:setup temporary 1000 worker)
+      #(ui ,ui:start&link permanent 1000 worker)
+      ,@(http:configure-server 'http port-number
+          (http:url-handler
+           (match (<request> path request)
+             ["/"
+              (let* ([num-clients (ui:num-clients)]
+                     [limit (http:find-param "limit" params)]
+                     [limit (and limit (string->number limit))]
+                     [limit (or limit 20)])
+                (match (transaction 'log-db
+                         (list
+                          (scalar (execute "select count(*) from keywords"))
+                          (scalar (execute "select count(*) from refs where type='defn'"))
+                          (scalar (execute "select count(*) from refs"))
+                          (scalar (execute "select count(distinct filename) from refs"))
+                          (execute "select datetime(timestamp/1000,'unixepoch','localtime'),path from roots order by timestamp desc")
+                          (execute "select datetime(timestamp/1000,'unixepoch','localtime'),pid,message from events order by rowid desc limit ?" limit)))
+                  [(,keywords ,defns ,refs ,files ,roots ,log)
+                   (http:respond conn 200 '(("Content-Type" . "text/html"))
+                     (html->bytevector
+                      `(html5
+                        (head
+                         (meta (@ (charset "UTF-8")))
+                         (title ,(software-product-name)))
+                        (body
+                         (pre
+                          ,(format "Connected clients: ~9:D\n" num-clients)
+                          ,(format "         Keywords: ~9:D\n" keywords)
+                          ,(format "      Definitions: ~9:D\n" defns)
+                          ,(format "       References: ~9:D\n" refs)
+                          ,(format "     Unique files: ~9:D\n" files))
+                         (pre
+                          ,@(map
+                             (lambda (root)
+                               (match root
+                                 [#(,date ,path)
+                                  (format "~a ~a\n" date path)]))
+                             roots))
+                         (pre
+                          ,@(map
+                             (lambda (row)
+                               (match row
+                                 [#(,date ,pid ,message)
+                                  (format "~a ~a ~a\n" date pid message)]))
+                             log))
+                         (hr)
+                         (pre ,(versions->string))))))]))]
+             ["/tower"
+              (ws:upgrade conn request (spawn&link client))]
+             [,_ #f])))))
+
   (define (tower:start-server verbose tower-db)
     (verbosity (or verbose 0))
     (log-file
@@ -510,59 +564,7 @@ order by B.rank desc, B.count desc, A.name asc"
       [(not tower-db) ":memory:"]
       [(path-absolute? tower-db) tower-db]
       [else (path-combine (base-dir) tower-db)]))
-    (app-sup-spec
-     (append (app-sup-spec)
-       `(#(tower-db:setup ,tower-db:setup temporary 1000 worker)
-         #(ui ,ui:start&link permanent 1000 worker)
-         ,@(http:configure-server 'http 51342
-             (http:url-handler
-              (match (<request> path request)
-                ["/"
-                 (let* ([num-clients (ui:num-clients)]
-                        [limit (http:find-param "limit" params)]
-                        [limit (and limit (string->number limit))]
-                        [limit (or limit 20)])
-                   (match (transaction 'log-db
-                            (list
-                             (scalar (execute "select count(*) from keywords"))
-                             (scalar (execute "select count(*) from refs where type='defn'"))
-                             (scalar (execute "select count(*) from refs"))
-                             (scalar (execute "select count(distinct filename) from refs"))
-                             (execute "select datetime(timestamp/1000,'unixepoch','localtime'),path from roots order by timestamp desc")
-                             (execute "select datetime(timestamp/1000,'unixepoch','localtime'),pid,message from events order by rowid desc limit ?" limit)))
-                     [(,keywords ,defns ,refs ,files ,roots ,log)
-                      (http:respond conn 200 '(("Content-Type" . "text/html"))
-                        (html->bytevector
-                         `(html5
-                           (head
-                            (meta (@ (charset "UTF-8")))
-                            (title ,(software-product-name)))
-                           (body
-                            (pre
-                             ,(format "Connected clients: ~9:D\n" num-clients)
-                             ,(format "         Keywords: ~9:D\n" keywords)
-                             ,(format "      Definitions: ~9:D\n" defns)
-                             ,(format "       References: ~9:D\n" refs)
-                             ,(format "     Unique files: ~9:D\n" files))
-                            (pre
-                             ,@(map
-                                (lambda (root)
-                                  (match root
-                                    [#(,date ,path)
-                                     (format "~a ~a\n" date path)]))
-                                roots))
-                            (pre
-                             ,@(map
-                                (lambda (row)
-                                  (match row
-                                    [#(,date ,pid ,message)
-                                     (format "~a ~a ~a\n" date pid message)]))
-                                log))
-                            (hr)
-                            (pre ,(versions->string))))))]))]
-                ["/tower"
-                 (ws:upgrade conn request (spawn&link client))]
-                [,_ #f]))))))
+    (app-sup-spec (append (app-sup-spec) (tower:sup-spec 51342)))
     (app:start)
     (receive))
   )
