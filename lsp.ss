@@ -35,6 +35,7 @@
    (keywords)
    (progress)
    (read)
+   (software-info)
    (swish imports)
    (tower-client)
    (trace)
@@ -679,7 +680,7 @@
          (set! shutdown-requested? #t)
          `#(ok #\nul ,state)]
         [,_
-         (fprintf (console-error-port) "*** Unhandled message ***\n")
+         (fprintf (console-error-port) "*** Unhandled message ~s ***\n" method)
          (trace-msg (json:make-object [id id] [method method] [params params]))
          `#(ignore ,state)]))
 
@@ -730,7 +731,7 @@
         ["$/setTrace" state]
         ["exit" (app:shutdown (if shutdown-requested? 0 1))]
         [,_
-         (fprintf (console-error-port) "*** Unhandled message ***\n")
+         (fprintf (console-error-port) "*** Unhandled message ~s ***\n" method)
          (trace-msg (json:make-object [method method] [params params]))
          state]))
 
@@ -791,7 +792,8 @@
                        [`(EXIT ,_ ,_) (event-mgr:unregister)])))))
          permanent 1000 worker)
        ))
-    (trace-versions)
+    (fprintf (console-error-port) "~a\n" (versions->string))
+    (flush-output-port (console-error-port))
     (app:start)
     (receive))
   )

@@ -26,26 +26,29 @@
    trace-init
    trace-msg
    trace-time
-   trace-versions
+   trace?
    )
   (import
    (chezscheme)
    (json)
-   (software-info)
    (swish imports)
    )
+  (define trace? (equal? (getenv "SWISH_LINT_TRACE") "yes"))
+
   (define (trace-init)
     (trace-output-port (console-error-port)))
 
   (define (trace-expr expr)
-    (pretty-print expr (trace-output-port))
-    (flush-output-port (trace-output-port))
+    (when trace?
+      (pretty-print expr (trace-output-port))
+      (flush-output-port (trace-output-port)))
     expr)
 
   (define (trace-msg msg)
-    (json:write-flat (trace-output-port) msg)
-    (newline (trace-output-port))
-    (flush-output-port (trace-output-port))
+    (when trace?
+      (json:write-flat (trace-output-port) msg)
+      (newline (trace-output-port))
+      (flush-output-port (trace-output-port)))
     msg)
 
   (define-syntax trace-time
@@ -56,14 +59,12 @@
          (call-with-values
            (lambda () e1 e2 ...)
            (lambda result
-             (let ([end (erlang:now)])
-               (pretty-print `(time ,who ,(- end start) ms)
-                 (trace-output-port))
-               (newline (trace-output-port))
-               (flush-output-port (trace-output-port))
+             (let* ([end (erlang:now)]
+                    [dur (- end start)])
+               (when (and trace? (> dur 20))
+                 (pretty-print `(time ,who ,dur ms)
+                   (trace-output-port))
+                 (newline (trace-output-port))
+                 (flush-output-port (trace-output-port)))
                (apply values result)))))]))
-
-  (define (trace-versions)
-    (fprintf (trace-output-port) "~a\n" (versions->string))
-    (flush-output-port (trace-output-port)))
   )
