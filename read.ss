@@ -40,6 +40,7 @@
    )
   (import
    (chezscheme)
+   (config-params)
    (swish imports))
 
   ;; give us enough access to internal annotation record for match
@@ -170,19 +171,22 @@
 
   (define identifier "[:*+A-Za-z0-9~&!?\\/<=>^%$@_.-]+")
 
-  (define defn-exprs
-    '("(?:meta\\s+)?(?:trace-)?define(?:-[\\S]+|\\s)?\\s+\\(?"
-      "set(?:-who)?!\\s+"))
+  (define (defn-exprs)
+    (list
+     (format "(?:meta\\s+)?(?:trace-)?(?:~a)(?:-[\\S]+|\\s)?\\s+\\(?"
+       (join (cons "define" (map pregexp-quote (config:definition-keywords))) #\|))
+     "set(?:-who)?!\\s+"))
 
-  (define defn-regexp
+  (define (defn-regexp)
     ;; leading paren
     ;; non-capture, any defn form
     ;; capture, identifier
-    (re (format "\\((?:~a)(~a)" (join defn-exprs #\|) identifier)))
+    (re (format "\\((?:~a)(~a)" (join (defn-exprs) #\|) identifier)))
 
   (define (walk-defns-re text table proc)
+    (define defn-re (defn-regexp))
     (let lp ([start 0])
-      (match (pregexp-match-positions defn-regexp text start)
+      (match (pregexp-match-positions defn-re text start)
         [(,_ (,start . ,end))
          (let ([name (substring text start end)])
            (unless (string->number name)
@@ -191,10 +195,11 @@
         [,_ (void)])))
 
   (define (walk-defns annotated-code table proc)
+    (define defines (join (cons "define" (map pregexp-quote (config:definition-keywords))) #\|))
     (define defun-match-regexp
-      (re "^(?:trace-)?define(?:-[\\S]+)?"))
+      (re (format "^(?:trace-)?(?:~a)(?:-[\\S]+)?" defines)))
     (define def-match-regexp
-      (re "^(?:trace-)?define(?:-[\\S]+)?|^set(?:-who)?!"))
+      (re (format "^(?:trace-)?(?:~a)(?:-[\\S]+)?|^set(?:-who)?!" defines)))
     (define local-keywords (make-eq-hashtable))
     (define (keyword? keyword mre)
       (and (symbol? keyword)

@@ -30,6 +30,7 @@
   (import
    (checkers)
    (chezscheme)
+   (config)
    (cursor)
    (doc)
    (indent)
@@ -638,6 +639,7 @@
          (cond
           [($state root-dir) =>
            (lambda (dir)
+             (config:load-project (path-combine dir ".swish" "lint"))
              (let ([progress (make-progress "enumerate-directories"
                                "Analyze files"
                                (lambda (done total)
