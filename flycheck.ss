@@ -84,18 +84,16 @@
           [efp ""]
           [msg (apply format fmt args)])]
         [`(annotation [source ,src])
-         (let* ([bfp (source-object-bfp src)]
-                [ht (json:make-object
-                     [file (current-filename)]
-                     [type type]
-                     [bfp bfp]
-                     [efp (source-object-efp src)]
-                     [msg (apply format fmt args)])])
+         (let ([bfp (source-object-bfp src)])
            (let-values ([(line char) (fp->line/char (current-source-table) bfp)])
-             (json:extend-object ht
-               [line line]
-               [column char]))
-           ht)]))
+             (json:make-object
+              [file (current-filename)]
+              [type type]
+              [line line]
+              [column char]
+              [bfp bfp]
+              [efp (source-object-efp src)]
+              [msg (apply format fmt args)])))]))
     (newline))
 
   (define (flycheck:process-file filename)
