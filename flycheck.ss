@@ -99,15 +99,26 @@
   (define (flycheck:process-file filename)
     (parameterize ([current-filename filename])
       (define loaded #f)
+      (define return-value 0)
+      (define (snoop x type fmt . args)
+        (set! return-value
+          (max return-value
+               (match type
+                 [error 2]
+                 [warning 1]
+                 [info 0]
+                 [hint 0])))
+        (apply report x type fmt args))
       (match (try (let ([code (utf8->string (read-file filename))])
                     (set! loaded code)
                     (cons code (read-code code))))
         [`(catch ,reason)
          (let-values ([(line msg) (reason->line/msg reason loaded)])
-           (report line 'error msg))]
+           (snoop line 'error msg))]
         [(,code . ,annotated-code)
          (parameterize ([current-source-table (make-code-lookup-table code)])
-           (check-import/export annotated-code report)
-           (check-line-whitespace code #f report)
-           (run-optional-checkers annotated-code code report))])))
+           (check-import/export annotated-code snoop)
+           (check-line-whitespace code #f snoop)
+           (run-optional-checkers annotated-code code snoop))])
+      return-value))
   )

@@ -154,4 +154,9 @@
     (report-format
      (compile-format
       (or (opt 'format) "%file: line %line: %msg")))
-    (for-each flycheck:process-file files)]))
+    (exit
+     (fold-left
+      (lambda (acc file)
+        (max acc (flycheck:process-file file)))
+      0
+      files))]))
