@@ -25,15 +25,13 @@
    check-import/export
    check-line-whitespace
    make-regexp-checker
-   optional-checkers
    run-optional-checkers
    )
   (import
    (chezscheme)
+   (config-params)
    (read)
    (swish imports))
-
-  (define optional-checkers (make-parameter '()))
 
   (define (run-optional-checkers annotated-code code report)
     (for-each

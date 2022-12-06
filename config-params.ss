@@ -1,6 +1,7 @@
 (library (config-params)
   (export
    config:definition-keywords
+   optional-checkers
    )
   (import
    (chezscheme)
@@ -8,4 +9,7 @@
    )
   ;; Project-level
   (define config:definition-keywords (make-parameter '()))
+
+  ;; User-level
+  (define optional-checkers (make-parameter '()))
   )

@@ -1,5 +1,6 @@
 (import
  (checkers)
+ (config-params)
  (json)
  (lsp)
  (software-info)

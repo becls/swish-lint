@@ -22,6 +22,7 @@
 
 (import
  (checkers)
+ (config-params)
  (read)
  (software-info))
 

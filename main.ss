@@ -24,6 +24,8 @@
 (import
  (checkers)
  (chezscheme)
+ (config)
+ (config-params)
  (flycheck)
  (indent)
  (json)
@@ -50,20 +52,10 @@
    [tower --tower bool "start tower server"]
    [tower-db --tower-db (string "<filename>") "save tower database to <filename>"]
    [update-keywords --update-keywords bool "update keywords"]
+   [user-config --user-config bool "load user configuration"]
    [verbose -v count "show debug messages (tower and indent only)"]
    [version --version bool "print version information"]
    [files (list . "file") "check file"]))
-
-(define (make-optional-passes opt)
-  (let lp ([ls (or (opt 'regexp-pass) '())] [acc '()])
-    (match ls
-      [() (reverse acc)]
-      [(,type ,regexp . ,rest)
-       (guard (member type '("info" "warning" "error")))
-       (lp rest
-         (cons (make-regexp-checker (string->symbol type) regexp) acc))]
-      [(,type ,_ . ,_)
-       (errorf 'make-optional-passes "invalid type: ~a" type)])))
 
 (define (show-version key)
   (printf "~11@a~@[ ~a~]~@[ (~a)~]\n"
@@ -74,6 +66,12 @@
 (software-info:install)
 (let* ([opt (parse-command-line-arguments cli)]
        [files (or (opt 'files) '())])
+  (define (regexp-opt->config)
+    (let lp ([ls (or (opt 'regexp-pass) '())])
+      (match ls
+        [() '()]
+        [(,type ,regexp . ,rest)
+         (cons `(regexp ,type ,regexp) (lp rest))])))
   (cond
    [(opt 'help)
     (display-help (app:name) cli (opt))
@@ -82,7 +80,7 @@
     (display (versions->string))
     (exit 0)]
    [(opt 'lsp)
-    (optional-checkers (make-optional-passes opt))
+    (optional-checkers (make-optional-passes (regexp-opt->config)))
     (lsp:start-server tower-port-number (console-input-port) (console-output-port))]
    [(opt 'tower)
     (let ([verbose (opt 'verbose)]
@@ -150,7 +148,9 @@
     (display-help (app:name) cli (opt))
     (exit 0)]
    [else
-    (optional-checkers (make-optional-passes opt))
+    (optional-checkers (make-optional-passes (regexp-opt->config)))
+    (when (opt 'user-config)
+      (config:load-user))
     (report-format
      (compile-format
       (or (opt 'format) "%file: line %line: %msg")))
