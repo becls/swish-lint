@@ -177,6 +177,10 @@ left outer join
 on A.name=B.name
 order by B.rank desc, B.count desc, A.name asc"
                    prefix root-fk filename line))]
+              [rows
+               (match rows
+                 [(#(,_ 1 ,@prefix) . ,rest) rest]
+                 [,_ rows])]
               [nrows (length rows)]
               [completions
                (mapn
