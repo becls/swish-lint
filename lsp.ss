@@ -721,11 +721,12 @@
         ["initialized"
          ;; Always load the user configuration event if root-dir is
          ;; not specified.
+         (output-env)
          (config:load-user)
          (cond
           [($state root-dir) =>
            (lambda (dir)
-             (config:load-project (path-combine dir ".swish" "swish-lint.ss"))
+             (config:load-project dir)
              (let ([progress (make-progress "enumerate-directories"
                                "Analyze files"
                                (lambda (done total)

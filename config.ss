@@ -1,20 +1,38 @@
 (library (config)
   (export
+   config-output-port
    config:load-project
    config:load-user
    config:user-dir
    make-optional-passes
+   output-env
    )
   (import
    (checkers)
    (chezscheme)
    (config-params)
    (swish imports)
-   (trace)
    )
+  (define config-output-port
+    (make-parameter
+     (make-custom-textual-output-port "bit-sink port"
+       (lambda (str start n) n) #f #f #f)))
+
+  (define (output-env)
+    (cond
+     [(getenv "XDG_CONFIG_HOME") =>
+      (lambda (home)
+        (fprintf (config-output-port) "XDG_CONFIG_HOME: ~a\n" home))]
+     [(getenv "HOME") =>
+      (lambda (home)
+        (fprintf (config-output-port) "HOME: ~a\n" home))]
+     [else
+      (fprintf (config-output-port) "Neither HOME nor XDG_CONFIG_HOME are set\n")]))
+
   (define (load-config who path process-expr)
-    (when (file-exists? path)
-      (trace-expr `(loading ,path))
+    (cond
+     [(file-exists? path)
+      (fprintf (config-output-port) "Found ~a configuration: ~a\n" who path)
       (match (try
               (let ([ip (open-file-to-read path)])
                 (on-exit (close-port ip)
@@ -24,26 +42,29 @@
                           '()
                           (cons x (lp))))))))
         [`(catch ,reason)
-         (trace-expr `(,who => ,(exit-reason->english reason)))]
+         (fprintf (config-output-port) "~a: ~a\n" who (exit-reason->english reason))]
         [,exprs
          (for-each
           (lambda (expr)
             (match (try (process-expr expr))
               [`(catch ,reason)
-               (trace-expr `(,who => ,(exit-reason->english reason)))]
+               (fprintf (config-output-port) "~a: ~a\n" who (exit-reason->english reason))]
               [,_ (void)]))
-          exprs)])))
+          exprs)])]
+     [else
+      (fprintf (config-output-port) "~:(~a~) configuration not found: ~a\n" who path)]))
 
   (define (config:load-project path)
-    (load-config 'config:load-project path
-      (lambda (expr)
-        (match expr
-          [(definition-keywords . ,ls)
-           (unless (for-all string? ls)
-             (throw "definition-keywords must all be strings"))
-           (config:definition-keywords ls)]
-          [,_
-           (trace-expr `(config:load-project ignoring ,expr))]))))
+    (let ([fn (path-combine path ".swish" "swish-lint.ss")])
+      (load-config 'project fn
+        (lambda (expr)
+          (match expr
+            [(definition-keywords . ,ls)
+             (unless (for-all string? ls)
+               (throw "definition-keywords must all be strings"))
+             (config:definition-keywords ls)]
+            [,_
+             (fprintf (config-output-port) "project: ignoring ~a\n" expr)])))))
 
   (define (config:user-dir)
     (cond
@@ -57,7 +78,7 @@
      [(config:user-dir) =>
       (lambda (path)
         (let ([fn (path-combine path "swish" "swish-lint.ss")])
-          (load-config 'config:load-user fn
+          (load-config 'user fn
             (lambda (expr)
               (match expr
                 [(find-files . ,(ls <= (,cmd . ,args)))
@@ -67,7 +88,7 @@
                 [(optional-checkers . ,ls)
                  (optional-checkers (append (optional-checkers) (make-optional-passes ls)))]
                 [,_
-                 (trace-expr `(config:load-user ignoring ,expr))])))))]))
+                 (fprintf (config-output-port) "user: ignoring ~a\n" expr)])))))]))
 
   (define (make-optional-passes ls)
     (let lp ([ls ls] [acc '()])

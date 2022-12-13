@@ -111,8 +111,13 @@
       [jsonrpc "2.0"]
       [method "initialized"]
       [params (json:make-object)]))
-   (when path
-     (wait-for-progress "enumerate-directories"))
+   (cond
+    [path
+     (wait-for-progress "enumerate-directories")]
+    [else
+     ;; give server enough time to process the messages, possibly
+     ;; producing startup messages.
+     (receive (after 100 'ok))])
    rpc))
 
 (define (stop-lsp-server rpc)

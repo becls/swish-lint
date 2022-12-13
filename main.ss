@@ -41,6 +41,7 @@
 (define cli
   (cli-specs
    default-help
+   [doctor --doctor bool "check your system for potential problems"]
    [lsp --lsp bool "start Language Server Protocol mode"]
    [format --format (string "<format>")
      '("format specifiers that include the following"
@@ -73,7 +74,34 @@
    [(opt 'version)
     (display (versions->string))
     (exit 0)]
+   [(opt 'doctor)
+    (config-output-port (console-output-port))
+    (trace-output-port (console-output-port))
+    (display (versions->string))
+    (newline)
+    (output-env)
+    (config:load-user)
+    (newline)
+    (printf "Current directory: ~a\n" (cd))
+    (let ()
+      (define (find-repo dir)
+        (if (file-exists? (path-combine dir ".git"))
+            dir
+            (let ([parent (path-parent dir)])
+              (if (string=? parent dir)
+                  #f
+                  (find-repo parent)))))
+      (let ([repo (find-repo (cd))])
+        (cond
+         [repo
+          (printf "Nearest repository: ~a\n" repo)
+          (newline)
+          (config:load-project repo)]
+         [else
+          (printf "No repository found\n")])))
+    (exit 0)]
    [(opt 'lsp)
+    (config-output-port (console-error-port))
     (optional-checkers (make-optional-passes (regexp-opt->config)))
     (lsp:start-server tower-port-number (console-input-port) (console-output-port))]
    [(opt 'tower)
