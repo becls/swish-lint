@@ -86,9 +86,10 @@
   (define ($defns-in-file name filename)
     (maybe-rows
      (execute "
-select D.filename,D.line,D.char from refs D
+select F.filename,D.line,D.char from refs D
+inner join files F on F.file_pk=D.file_fk
 where D.name=?
-  and D.filename=?
+  and F.filename=?
   and D.type='defn'
 order by D.line asc"
        name filename)))
@@ -96,38 +97,42 @@ order by D.line asc"
   (define ($defns-in-workspace name root-fk)
     (maybe-rows
      (execute "
-select D.filename,D.line,D.char from refs D
+select F.filename,D.line,D.char from refs D
+inner join files F on F.file_pk=D.file_fk
 where D.name=?
   and D.root_fk=?
   and D.type='defn'
-order by substr(D.filename,-3)='.ss' desc, D.filename asc, D.line asc"
+order by substr(F.filename,-3)='.ss' desc, F.filename asc, D.line asc"
        name root-fk)))
 
   (define ($refs-in-file name filename)
     (execute "
 select D.line,D.char from refs D
+inner join files F on F.file_pk=D.file_fk
 where D.name=?
-  and D.filename=?
+  and F.filename=?
 order by D.line asc"
       name filename))
 
   (define ($refs-in-workspace name root-fk)
     (execute "
-select D.filename,D.line,D.char from refs D
+select F.filename,D.line,D.char from refs D
+inner join files F on F.file_pk=D.file_fk
 where D.name=?
   and D.root_fk=?
-order by substr(D.filename,-3)='.ss' desc, D.filename asc, D.line asc"
+order by substr(F.filename,-3)='.ss' desc, F.filename asc, D.line asc"
       name root-fk))
 
   (define ($defns-anywhere name filename)
     (maybe-rows
      (execute "
-select D.filename,D.line,D.char from refs D
+select F.filename,D.line,D.char from refs D
 inner join roots R on D.root_fk=R.root_pk
+inner join files F on F.file_pk=D.file_fk
 where D.name=?
   and D.type='defn'
-order by D.filename=? desc, R.timestamp desc,
-substr(D.filename,-3)='.ss' desc, D.filename asc, D.line asc"
+order by F.filename=? desc, R.timestamp desc,
+substr(F.filename,-3)='.ss' desc, F.filename asc, D.line asc"
        name filename)))
 
   (define do-log
@@ -148,6 +153,11 @@ substr(D.filename,-3)='.ss' desc, D.filename asc, D.line asc"
         (display message)
         (newline)])]))
 
+  (define (prefix-integer s)
+    (if (string=? s "")
+        0
+        (char->integer (char-downcase (string-ref s 0)))))
+
   (define (handle-message ws msg)
     (match (string->symbol (json:get msg 'method))
       [log
@@ -163,21 +173,24 @@ substr(D.filename,-3)='.ss' desc, D.filename asc, D.line asc"
               [start (erlang:now)]
               [rows
                (transaction 'log-db
-                 (execute "
-select B.rank, B.count, A.name
+                 (let ([file-fk (scalar (execute "select file_pk from files where filename=?" filename))]
+                       [pre1 (prefix-integer prefix)])
+                   (execute "
+select
+  case when file_fk=?4 then sum(?5 - min(0, line)) else 0 end as rank
+  ,count(refs.name) as count
+  ,candidates.name
 from
-(select keyword as name from keywords where keyword like (?1 || '%')
+(select keyword as name from keywords where keyword LIKE (?2 || '%')
  union
- select name from refs where name like (?1 || '%') and root_fk=?2) A
-left outer join
-(select distinct name, count(*) as count
-  ,sum((filename=?3) * ?4 - min(0, line)) as rank
- from refs
- where name like (?1 || '%') and root_fk=?2
- group by name) B
-on A.name=B.name
-order by B.rank desc, B.count desc, A.name asc"
-                   prefix root-fk filename line))]
+ select name from refs
+ where pre1=?1 and name LIKE (?2 || '%') and root_fk=?3
+) candidates
+left outer join refs
+on candidates.name = refs.name
+group by candidates.name
+order by rank desc, count desc, candidates.name asc"
+                     pre1 prefix root-fk file-fk line)))]
               [rows
                (match rows
                  [(#(,_ 1 ,@prefix) . ,rest) rest]
@@ -335,21 +348,28 @@ order by B.rank desc, B.count desc, A.name asc"
              [root-fk (root-key)]
              [start (erlang:now)])
          (assert (path-absolute? filename))
-         (db:log 'log-db "delete from refs where filename=?" filename)
-         (for-each
-          (lambda (ref)
-            (let ([meta (json:get ref 'meta)])
-              (db:log 'log-db "insert into refs(timestamp,root_fk,filename,name,type,line,char,meta) values(?,?,?,?,?,?,?,?)"
-                (coerce start)
-                (coerce root-fk)
-                (coerce filename)
-                (coerce (json:get ref 'name))
-                (coerce (and (= (json:ref meta 'definition 0) 1)
-                             "defn"))
-                (coerce (json:get ref 'line))
-                (coerce (json:get ref 'char))
-                (coerce meta))))
-          refs)
+         (db:log 'log-db "insert into files (timestamp,filename) values (?,?) on conflict(filename) do update set timestamp=excluded.timestamp"
+           (coerce start)
+           (coerce filename))
+         (let ([file-fk (transaction 'log-db
+                          (scalar (execute "select file_pk from files where filename=?" filename)))])
+           (db:log 'log-db "delete from refs where file_fk=?" file-fk)
+           (for-each
+            (lambda (ref)
+              (let ([meta (json:get ref 'meta)]
+                    [name (json:get ref 'name)])
+                (db:log 'log-db "insert into refs(timestamp,root_fk,file_fk,pre1,name,type,line,char,meta) values(?,?,?,?,?,?,?,?,?)"
+                  (coerce start)
+                  (coerce root-fk)
+                  (coerce file-fk)
+                  (coerce (prefix-integer name))
+                  (coerce name)
+                  (coerce (and (= (json:ref meta 'definition 0) 1)
+                               "defn"))
+                  (coerce (json:get ref 'line))
+                  (coerce (json:get ref 'char))
+                  (coerce meta))))
+            refs))
          (unless (< (verbosity) 1)
            (transaction 'log-db
              (do-log 1
@@ -454,6 +474,10 @@ order by B.rank desc, B.count desc, A.name asc"
         [timestamp integer]
         [pid text]
         [message text])
+      (create-table files
+        [file_pk integer primary key]
+        [timestamp integer]
+        [filename text unique])
       (create-table keywords
         [timestamp integer]
         [keyword text]
@@ -461,7 +485,8 @@ order by B.rank desc, B.count desc, A.name asc"
       (create-table refs
         [timestamp integer]
         [root_fk integer]
-        [filename text]
+        [file_fk integer]
+        [pre1 integer]
         [name text]
         [type text]
         [line integer]
@@ -478,6 +503,8 @@ order by B.rank desc, B.count desc, A.name asc"
 
       (create-index 'refs_name "refs(name)")
       (create-index 'refs_root "refs(root_fk)")
+      (create-index 'refs_file "refs(file_fk)")
+      (create-index 'refs_pre1 "refs(pre1)")
       (create-index 'refs_type "refs(type)"))
     (define (upgrade-db)
       (match (log-db:version schema-name)
@@ -520,7 +547,7 @@ order by B.rank desc, B.count desc, A.name asc"
                           (scalar (execute "select count(*) from keywords"))
                           (scalar (execute "select count(*) from refs where type='defn'"))
                           (scalar (execute "select count(*) from refs"))
-                          (scalar (execute "select count(distinct filename) from refs"))
+                          (scalar (execute "select count(*) from files"))
                           (execute "select datetime(timestamp/1000,'unixepoch','localtime'),path from roots order by timestamp desc")
                           (execute "select datetime(timestamp/1000,'unixepoch','localtime'),pid,message from events order by rowid desc limit ?" limit)))
                   [(,keywords ,defns ,refs ,files ,roots ,log)
