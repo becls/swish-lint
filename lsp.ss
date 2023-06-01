@@ -258,7 +258,7 @@
          (spawn-update-refs uri annotated-code source-table text)
          (current-source-table source-table)
          (check-import/export annotated-code report)
-         (run-optional-checkers annotated-code text report))]))
+         (run-optional-checkers uri annotated-code text report))]))
 
   (define (do-update-refs uri text annotated-code source-table)
     (let ([filename (uri->abs-path uri)]

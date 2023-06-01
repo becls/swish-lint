@@ -119,6 +119,6 @@
          (parameterize ([current-source-table (make-code-lookup-table code)])
            (check-import/export annotated-code snoop)
            (check-line-whitespace code #f snoop)
-           (run-optional-checkers annotated-code code snoop))])
+           (run-optional-checkers filename annotated-code code snoop))])
       return-value))
   )
