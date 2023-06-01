@@ -4,6 +4,7 @@
  (json)
  (lsp)
  (software-info)
+ (testing common)
  (testing pipe)
  (testing rpc)
  (tower)
@@ -600,6 +601,40 @@
             ("incorrectly sorted: (omega)" 3 from 1 2 to 1 9)
             ("should sort imports" 2 from 0 1 to 0 7))
            (flush-diagnostics uri)])
+
+        ;; cover cases in ->lsp-range used by external checkers
+        (with-tmp-dir
+         (let ([fn (path-combine (tmp-dir) "ranges")]
+               [msg "Exception in car: 12 is not a pair"])
+           (write-script fn
+             `((json:pretty
+                (json:make-object       ; no range
+                 [message ,msg]))
+               (json:pretty
+                (json:make-object       ; line only
+                 [line 10]
+                 [message ,msg]))
+               (json:pretty
+                (json:make-object     ; line/column point to an atomic
+                 [line 1]
+                 [column 3]
+                 [message ,msg]))
+               (json:pretty    ; line/column do not point to an atomic
+                (json:make-object
+                 [line 1]
+                 [column 10]
+                 [message ,msg]))))
+           (parameterize ([optional-checkers (list (make-external-checker (list fn)))])
+             (did-save uri         ; must save to run external checker
+               (code
+                "(car 12)"))
+             (match (extract-diagnostics (wait-for-diagnostics uri 5000))
+               [((,@msg 1 from 0 9 to 1 0)
+                 (,@msg 1 from 0 1 to 0 4)
+                 (,@msg 1 from 9 0 to 10 0)
+                 (,@msg 1 from 0 0 to 1 0))
+                (flush-diagnostics uri)]))
+           (remove-file fn)))
 
         (did-close uri)
         'ok))))

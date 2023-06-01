@@ -73,6 +73,16 @@
     (let lp ([ls ls] [acc '()])
       (match ls
         [() (reverse acc)]
+        [((external . ,(ls <= (,cmd . ,args))) . ,rest)
+         (guard
+          (for-all
+           (lambda (x)
+             (match x
+               [filename #t]
+               [(filename ,re) (guard (string? re)) #t]
+               [,_ (string? x)]))
+           ls))
+         (lp rest (cons (make-external-checker ls) acc))]
         [((regexp ,type ,regexp) . ,rest)
          (guard (member type '("info" "warning" "error")))
          (lp rest
