@@ -717,6 +717,7 @@
           #f
           state)]
         ["textDocument/didClose" state]
+        ["$/setTrace" state]
         ["exit" (app:shutdown (if shutdown-requested? 0 1))]
         [,_
          (fprintf (console-error-port) "*** Unhandled message ***\n")
