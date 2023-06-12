@@ -33,9 +33,9 @@
    (read)
    (swish imports))
 
-  (define (run-optional-checkers uri annotated-code code report)
+  (define (run-optional-checkers uri skip-delay? annotated-code code report)
     (for-each
-     (lambda (check) (check uri annotated-code code report))
+     (lambda (check) (check uri skip-delay? annotated-code code report))
      (optional-checkers)))
 
   (define (check-import/export x report)
@@ -134,7 +134,7 @@
 
   (define (make-regexp-checker type regexp)
     (define compiled-regexp (pregexp regexp))
-    (lambda (uri annotated-code code report)
+    (lambda (uri skip-delay? annotated-code code report)
       (do ([ln 1 (+ ln 1)]
            [lines (split code #\newline) (cdr lines)])
           ((null? lines))

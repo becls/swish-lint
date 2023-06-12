@@ -92,7 +92,7 @@
    ([,check (make-regexp-checker 'info "TEST.*")]
     [,results '()]
     [,_
-     (check "file:///tmp/foo.ss" #f
+     (check "file:///tmp/foo.ss" #t #f
        (code
         "(let ()"
         "  body   ; TEST: simple"
@@ -117,7 +117,7 @@
     (match-let*
      ([,results '()]
       [,_
-       (run-optional-checkers "file:///tmp/foo.ss" #f
+       (run-optional-checkers "file:///tmp/foo.ss" #t #f
          (code
           "(let ()"
           "  body   ; INFO: informative"

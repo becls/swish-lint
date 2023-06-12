@@ -174,7 +174,7 @@
        (unless skip-delay?
          (receive (after 1000 'ok)))
        (let ([text (cursor->string cursor)])
-         (check uri text)
+         (check uri text skip-delay?)
          (publish-diagnostics uri)
          (unless skip-delay?
            (receive (after 30000 'ok)))
@@ -246,7 +246,7 @@
                     [ec (- ec 1)])
                 (make-range (make-pos bl bc) (make-pos el ec)))))])])))
 
-  (define (check uri text)
+  (define (check uri text skip-delay?)
     (match (try (read-code text))
       [`(catch ,reason)
        (let ([table (make-code-lookup-table text)])
@@ -258,7 +258,7 @@
          (spawn-update-refs uri annotated-code source-table text)
          (current-source-table source-table)
          (check-import/export annotated-code report)
-         (run-optional-checkers uri annotated-code text report))]))
+         (run-optional-checkers uri skip-delay? annotated-code text report))]))
 
   (define (do-update-refs uri text annotated-code source-table)
     (let ([filename (uri->abs-path uri)]
