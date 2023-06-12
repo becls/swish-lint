@@ -98,9 +98,9 @@
        (lambda (x type fmt . args)
          (set! results (cons (list x type (apply format fmt args)) results))))]
     [,results (reverse results)]
-    [((#(range 2 11 2 23) info "TEST: simple")
-      (#(range 3 11 3 33) info "TEST: (printf \"~a\" 12)")
-      (#(range 4 11 4 19) info "TEST: ~a"))
+    [((#(range 2 12 2 24) info "TEST: simple")
+      (#(range 3 12 3 34) info "TEST: (printf \"~a\" 12)")
+      (#(range 4 12 4 20) info "TEST: ~a"))
      results])
    'ok))
 
@@ -123,8 +123,8 @@
          (lambda (x type fmt . args)
            (set! results (cons (list x type (apply format fmt args)) results))))]
       [,results (reverse results)]
-      [((#(range 2 11 2 28) info "INFO: informative")
-        (#(range 3 11 3 30) warning "WARNING: be careful")
-        (#(range 4 11 4 32) error "ERROR: this is broken"))
+      [((#(range 2 12 2 29) info "INFO: informative")
+        (#(range 3 12 3 31) warning "WARNING: be careful")
+        (#(range 4 12 4 33) error "ERROR: this is broken"))
        results])
      'ok)))

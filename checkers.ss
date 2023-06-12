@@ -146,7 +146,8 @@
               [#f (void)]
               [() (void)]
               [((,start . ,end) . ,rest)
-               (report `#(range ,ln ,start ,ln ,end)
+               ;; start and end are 0-based, but #(range ...) is 1-based
+               (report `#(range ,ln ,(+ start 1) ,ln ,(+ end 1))
                  type
                  "~a"
                  (substring line start end))

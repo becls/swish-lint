@@ -284,7 +284,9 @@
           (guard (and (fixnum? start-line) (fixnum? start-column)
                       (fixnum? end-line) (fixnum? end-column)))
           (let ([start-line (- start-line 1)] ; LSP is 0-based
-                [end-line (- end-line 1)])
+                [end-line (- end-line 1)]
+                [start-column (- start-column 1)]
+                [end-column (- end-column 1)])
             (make-range (make-pos start-line start-column)
               (make-pos end-line end-column)))]
          [`(annotation [source ,src])
