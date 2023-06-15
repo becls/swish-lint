@@ -83,6 +83,15 @@
           [bfp ""]
           [efp ""]
           [msg (apply format fmt args)])]
+        [#(near ,code ,line ,column)
+         (json:make-object
+          [file (current-filename)]
+          [type type]
+          [line (or line 1)]
+          [column (or column 1)]
+          [bfp ""]
+          [efp ""]
+          [msg (apply format fmt args)])]
         [`(annotation [source ,src])
          (let ([bfp (source-object-bfp src)])
            (let-values ([(line char) (fp->line/char (current-source-table) bfp)])

@@ -215,36 +215,61 @@
       [info 3]
       [hint 4]))
 
+  (define (bfp/efp->lsp-range table bfp efp)
+    (let-values ([(bl bc) (fp->line/char table bfp)]
+                 [(el ec) (fp->line/char table efp)])
+      (let ([bl (- bl 1)]               ; LSP is 0-based
+            [el (- el 1)]
+            [bc (- bc 1)]
+            [ec (- ec 1)])
+        (make-range (make-pos bl bc) (make-pos el ec)))))
+
+  (define (find-range code table line1 col1)
+    (match (try
+            (let ([fp (line/char->fp table line1 col1)])
+              (let-values ([(type value bfp efp) (read-token-near/fp code fp)])
+                (and (eq? type 'atomic)
+                     (bfp/efp->lsp-range table bfp efp)))))
+      [`(catch ,reason)
+       (trace-expr
+        `(find-range ,line1 ,col1 => ,(exit-reason->english reason)))
+       #f]
+      [,result result]))
+
+  (define (->lsp-range x)
+    (match x
+      [,line (guard (fixnum? line))
+       (let ([line (- line 1)])         ; LSP is 0-based
+         (make-range (make-pos line 0) (make-pos (+ line 1) 0)))]
+      [#(range ,start-line ,start-column ,end-line ,end-column)
+       (guard (and (fixnum? start-line) (fixnum? start-column)
+                   (fixnum? end-line) (fixnum? end-column)))
+       (let ([start-line (- start-line 1)] ; LSP is 0-based
+             [end-line (- end-line 1)]
+             [start-column (- start-column 1)]
+             [end-column (- end-column 1)])
+         (make-range (make-pos start-line start-column)
+           (make-pos end-line end-column)))]
+      [#(near ,code ,line ,column)
+       (cond
+        [(not line) (->lsp-range 1)]
+        [(not column) (->lsp-range line)]
+        [(find-range code (current-source-table) line column)]
+        [else
+         (let ([line (- line 1)]        ; LSP is 0-based
+               [column (- column 1)])
+           (make-range (make-pos line column) (make-pos (+ line 1) 0)))])]
+      [`(annotation [source ,src])
+       (bfp/efp->lsp-range (current-source-table)
+         (source-object-bfp src)
+         (source-object-efp src))]))
+
   (define (report x type fmt . args)
     (add-diagnostic
      (json:make-object
       [severity (type->severity type)]
       [message (apply format fmt args)]
-      [range
-       (match x
-         [,line (guard (fixnum? line))
-          (let ([line (- line 1)])      ; LSP is 0-based
-            (make-range (make-pos line 0) (make-pos (+ line 1) 0)))]
-         [#(range ,start-line ,start-column ,end-line ,end-column)
-          (guard (and (fixnum? start-line) (fixnum? start-column)
-                      (fixnum? end-line) (fixnum? end-column)))
-          (let ([start-line (- start-line 1)] ; LSP is 0-based
-                [end-line (- end-line 1)]
-                [start-column (- start-column 1)]
-                [end-column (- end-column 1)])
-            (make-range (make-pos start-line start-column)
-              (make-pos end-line end-column)))]
-         [`(annotation [source ,src])
-          (let* ([bfp (source-object-bfp src)]
-                 [efp (source-object-efp src)]
-                 [table (current-source-table)])
-            (let-values ([(bl bc) (fp->line/char table bfp)]
-                         [(el ec) (fp->line/char table efp)])
-              (let ([bl (- bl 1)]       ; LSP is 0-based
-                    [el (- el 1)]
-                    [bc (- bc 1)]
-                    [ec (- ec 1)])
-                (make-range (make-pos bl bc) (make-pos el ec)))))])])))
+      [range (->lsp-range x)])))
 
   (define (check uri text skip-delay?)
     (match (try (read-code text))
