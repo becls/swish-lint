@@ -60,6 +60,10 @@
           (load-config 'config:load-user fn
             (lambda (expr)
               (match expr
+                [(find-files . ,(ls <= (,cmd . ,args)))
+                 (unless (for-all string? ls)
+                   (throw "find-files must all be strings"))
+                 (config:find-files ls)]
                 [(optional-checkers . ,ls)
                  (optional-checkers (append (optional-checkers) (make-optional-passes ls)))]
                 [,_

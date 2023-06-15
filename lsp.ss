@@ -20,6 +20,7 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (lsp)
   (export
    lsp:read-loop
@@ -31,6 +32,7 @@
    (checkers)
    (chezscheme)
    (config)
+   (config-params)
    (cursor)
    (doc)
    (indent)
@@ -405,7 +407,38 @@
                     acc)
                    acc))))))))
 
-  (define (find-files path . extensions)
+  (define (find-files-external ff path)
+    (trace-expr `(find-files-external ,ff ,path))
+    (call-with-values
+      (lambda ()
+        (try (parameterize ([cd path])
+               (spawn-os-process (car ff) (cdr ff) (spawn values)))))
+      (case-lambda
+       [(fault)
+        (trace-expr `(find-files => ,(exit-reason->english fault)))
+        '()]
+       [(to-stdin from-stdout from-stderr os-pid)
+        (let ([to-stdin (binary->utf8 to-stdin)]
+              [from-stdout (binary->utf8 from-stdout)]
+              [from-stderr (binary->utf8 from-stderr)])
+          (on-exit (begin (close-input-port from-stdout)
+                          (close-input-port from-stderr))
+            (close-output-port to-stdin)
+            (spawn
+             (lambda ()
+               (let lp ()
+                 (let ([line (get-line from-stderr)])
+                   (unless (eof-object? line)
+                     (display line (trace-output-port))
+                     (newline (trace-output-port))
+                     (lp))))))
+            (let lp ([ls '()])
+              (match (get-line from-stdout)
+                [#!eof (reverse ls)]
+                [,fn (lp (cons (path-combine path fn) ls))]))))])))
+
+  (define (find-files-default path)
+    (define extensions '("ss" "ms"))
     (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
     (let search ([path path] [hits '()])
       (match (try (list-directory path))
@@ -427,6 +460,12 @@
               [,_ hits])) ;; not following symlinks
           hits
           found)])))
+
+  (define (find-files path)
+    (let ([ff (config:find-files)])
+      (if ff
+          (find-files-external ff path)
+          (find-files-default path))))
 
   (define (lsp-server:start&link)
     (define-state-tuple <lsp-server>
@@ -652,7 +691,7 @@
                   (lambda (state fn)
                     (updated (abs-path->uri fn) #f #t progress state))
                   state
-                  (find-files dir "ss" "ms")))))]
+                  (find-files dir)))))]
           [else state])]
         ["textDocument/didOpen"
          (let ([doc (json:get params 'textDocument)])

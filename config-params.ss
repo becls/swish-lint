@@ -1,6 +1,7 @@
 (library (config-params)
   (export
    config:definition-keywords
+   config:find-files
    optional-checkers
    )
   (import
@@ -12,4 +13,6 @@
 
   ;; User-level
   (define optional-checkers (make-parameter '()))
+
+  (define config:find-files (make-parameter #f))
   )
