@@ -20,7 +20,11 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(import (read))
+(import
+ (read)
+ (software-info))
+
+(software-info:install)
 
 (isolate-mat definitions ()
   (define (extract-name str)

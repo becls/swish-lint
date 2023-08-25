@@ -1,10 +1,13 @@
 (import
  (json)
  (lsp)
+ (software-info)
  (testing pipe)
  (testing rpc)
  (tower)
  )
+
+(software-info:install)
 
 (define (capture-progress)
   (define-tuple <progress> token kind message percentage)

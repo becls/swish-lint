@@ -22,7 +22,10 @@
 
 (import
  (checkers)
- (read))
+ (read)
+ (software-info))
+
+(software-info:install)
 
 (define-syntax code
   (syntax-rules ()

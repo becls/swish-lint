@@ -20,7 +20,11 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(import (indent))
+(import
+ (indent)
+ (software-info))
+
+(software-info:install)
 
 ;; This is handy for debugging failing cases.
 (define write-files? #f)
