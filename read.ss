@@ -173,7 +173,8 @@
 
   (define (defn-exprs)
     (list
-     (format "(?:meta\\s+)?(?:trace-)?(?:~a)(?:-[\\S]+|\\s)?\\s+\\(?"
+     (format "(?:~a\\s+)?(?:trace-)?(?:~a)(?:-[\\S]+|\\s)?\\s+\\(?"
+       identifier
        (join (cons "define" (map pregexp-quote (config:definition-keywords))) #\|))
      "set(?:-who)?!\\s+"))
 
@@ -227,15 +228,15 @@
               [expression (,_ ,name.anno . ,_)])
            (guard (keyword? keyword def-match-regexp))
            (guarded name name.anno)]
-          [`(annotation [stripped (meta ,keyword (,name . ,_) . ,_)]
+          [`(annotation [stripped (,meta ,keyword (,name . ,_) . ,_)]
               [expression
                (,_ ,_ `(annotation [expression (,name.anno . ,_)]) . ,_)])
-           (guard (keyword? keyword defun-match-regexp))
+           (guard (and (symbol? meta) (keyword? keyword defun-match-regexp)))
            (guarded name name.anno)]
-          [`(annotation [stripped (meta ,keyword ,name . ,_)]
+          [`(annotation [stripped (,meta ,keyword ,name . ,_)]
               [expression (,_ ,_ ,name.anno . ,_)])
            ;; Use defun here because set! is not valid with meta.
-           (guard (keyword? keyword defun-match-regexp))
+           (guard (and (symbol? meta) (keyword? keyword defun-match-regexp)))
            (guarded name name.anno)]
           [,_ (void)]))))
 
