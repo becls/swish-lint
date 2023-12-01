@@ -45,7 +45,7 @@
 (lsp-register-client
  (make-lsp-client
   :new-connection (lsp-stdio-connection
-                   '("swish-lint" "--lsp" "-r" "info" "TODO.*"))
+                   '("swish-lint" "--lsp"))
   :major-modes '(scheme-mode)
   :server-id 'swish-ls
   ))
