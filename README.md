@@ -76,6 +76,11 @@ scheme mode hook:
      (local-set-key (kbd "C-M-q") 'swish-indent-sexp))))
 ```
 
+## Customize Configuration
+
+Swish-Lint provides user-level and project-level
+[configuration](configuration.md) to customize your experience.
+
 ## Design
 
 Swish-Lint uses a client/server architecture. The client provides the
