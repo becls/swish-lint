@@ -482,28 +482,13 @@
                        (lp ls)))]))))])))
 
   (define (find-files-default path)
-    (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
-    (let search ([path path] [hits '()])
-      (match (try (list-directory path))
-        [`(catch ,_) hits]
-        [,found
-         (fold-left
-          (lambda (hits entry)
-            (match entry
-              [(,fn . ,@DIRENT_DIR)
-               (let ([full (combine path fn)])
-                 (cond
-                  [(string=? fn ".git") hits] ; skip the actual repo tree
-                  [(file-exists? (path-combine full ".git")) hits] ; skip repos
-                  [else (search full hits)]))]
-              [(,fn . ,@DIRENT_FILE)
-               (let ([fn (combine path fn)])
-                 (if (keep-file? fn)
-                     (cons fn hits)
-                     hits))]
-              [,_ hits])) ;; not following symlinks
-          hits
-          found)])))
+    (filter-files path
+      (lambda (dir)
+        (cond
+         [(string=? (path-last dir) ".git") #f] ; skip the actual repo tree
+         [(file-exists? (path-combine dir ".git")) #f] ; skip repos
+         [else #t]))
+      keep-file?))
 
   (define (find-files path)
     (let ([ff (config:find-files)])
