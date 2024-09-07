@@ -40,7 +40,7 @@
     (software-version key "1.3.0"))
 
   (define (output-version op key)
-    (fprintf op "~11@a~@[ ~a~]~@[ (~a)~]\n"
+    (fprintf op "~11@a~@[ ~6@a~]~@[ (~a)~]\n"
       (software-product-name key)
       (software-version key)
       (software-revision key)))

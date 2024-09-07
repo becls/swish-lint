@@ -57,12 +57,6 @@
    [version --version bool "print version information"]
    [files (list . "file") "check file"]))
 
-(define (show-version key)
-  (printf "~11@a~@[ ~a~]~@[ (~a)~]\n"
-    (software-product-name key)
-    (software-version key)
-    (software-revision key)))
-
 (software-info:install)
 (let* ([opt (parse-command-line-arguments cli)]
        [files (or (opt 'files) '())])
