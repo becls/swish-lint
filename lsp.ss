@@ -432,6 +432,21 @@
                     acc)
                    acc))))))))
 
+  (define (keep-file? fn)
+    (let ([ext (path-extension fn)])
+      (or (member ext '("ss" "ms"))
+          (let ([ip (open-binary-file-to-read fn)])
+            (on-exit (close-port ip)
+              (and (eqv? (get-u8 ip) (char->integer #\#))
+                   (eqv? (get-u8 ip) (char->integer #\!))
+                   (let ([b (get-u8 ip)])
+                     (or (eqv? b (char->integer #\space)) (eqv? b (char->integer #\/))))
+                   (let ([ip (binary->utf8 ip)])
+                     (let ([line (get-line ip)])
+                       (and (not (eof-object? line))
+                            (pregexp-match (re "swish|scheme|petite") line)
+                            #t)))))))))
+
   (define (find-files-external ff path)
     (trace-expr `(find-files-external ,ff ,path))
     (call-with-values
@@ -460,10 +475,13 @@
             (let lp ([ls '()])
               (match (get-line from-stdout)
                 [#!eof (reverse ls)]
-                [,fn (lp (cons (path-combine path fn) ls))]))))])))
+                [,fn
+                 (let ([fn (path-combine path fn)])
+                   (if (and (regular-file? fn) (keep-file? fn))
+                       (lp (cons fn ls))
+                       (lp ls)))]))))])))
 
   (define (find-files-default path)
-    (define extensions '("ss" "ms"))
     (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
     (let search ([path path] [hits '()])
       (match (try (list-directory path))
@@ -479,9 +497,10 @@
                   [(file-exists? (path-combine full ".git")) hits] ; skip repos
                   [else (search full hits)]))]
               [(,fn . ,@DIRENT_FILE)
-               (if (member (path-extension fn) extensions)
-                   (cons (combine path fn) hits)
-                   hits)]
+               (let ([fn (combine path fn)])
+                 (if (keep-file? fn)
+                     (cons fn hits)
+                     hits))]
               [,_ hits])) ;; not following symlinks
           hits
           found)])))
