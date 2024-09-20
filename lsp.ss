@@ -582,10 +582,10 @@
       (match method
         ["initialize"
          ;;(trace-msg (json:make-object [method method] [params params]))
-         (let* ([root-uri (json:get params '(rootUri))]
+         (let* ([root-uri (json:get params 'rootUri)]
                 [root-uri (and (string? root-uri) root-uri)]
                 [root-dir (and root-uri (uri->abs-path root-uri))]
-                [client-cap (json:get params '(capabilities))])
+                [client-cap (json:get params 'capabilities)])
            (tower-client:reset-directory root-dir)
            `#(ok
               ,(json:make-object
@@ -676,7 +676,7 @@
     (define (handle-notify method params state)
       (match method
         ["$/cancelRequest"
-         (let ([id (json:get params '(id))])
+         (let ([id (json:get params 'id)])
            (cond
             [(ht:ref ($state req->pid) id #f) =>
              (lambda (pid)
@@ -700,19 +700,19 @@
                   (find-files dir "ss" "ms")))))]
           [else state])]
         ["textDocument/didOpen"
-         (let ([doc (json:get params '(textDocument))])
-           (updated (json:get doc '(uri)) (json:get doc '(text)) #t #f state))]
+         (let ([doc (json:get params 'textDocument)])
+           (updated (json:get doc 'uri) (json:get doc 'text) #t #f state))]
         ["textDocument/didChange"
          (updated
           (json:get params '(textDocument uri))
-          (json:get (car (last-pair (json:get params '(contentChanges)))) '(text))
+          (json:get (car (last-pair (json:get params 'contentChanges))) '(text))
           #f
           #f
           state)]
         ["textDocument/didSave"
          (updated
           (json:get params '(textDocument uri))
-          (json:get params '(text))
+          (json:get params 'text)
           #t
           #f
           state)]
