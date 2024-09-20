@@ -122,7 +122,7 @@
       `#(ok ,(<tower-client> make
                [ws #f]
                [id 0]
-               [id-map (ht:make equal-hash eq? fixnum?)]
+               [id-map (ht:make values eq? fixnum?)]
                [sync-token #f])))
     (define (terminate reason state)
       (ws:close ($state ws)))
@@ -195,7 +195,7 @@
                ($state copy
                  [ws #f]
                  [id 0]
-                 [id-map (ht:make equal-hash eq? fixnum?)])]
+                 [id-map (ht:make values eq? fixnum?)])]
               [else state]))]
         [#(ws:init ,ws)
          `#(no-reply ,state)]))
