@@ -54,17 +54,20 @@
   (define-syntax trace-time
     (syntax-rules ()
       [(_ $who e1 e2 ...)
-       (let ([who $who]
-             [start (erlang:now)])
-         (call-with-values
-           (lambda () e1 e2 ...)
-           (lambda result
-             (let* ([end (erlang:now)]
-                    [dur (- end start)])
-               (when (and trace? (> dur 20))
-                 (pretty-print `(time ,who ,dur ms)
-                   (trace-output-port))
-                 (newline (trace-output-port))
-                 (flush-output-port (trace-output-port)))
-               (apply values result)))))]))
+       (let ([f (lambda () e1 e2 ...)])
+         (if (not trace?)
+             (f)
+             (let ([who $who]
+                   [start (erlang:now)])
+               (call-with-values
+                 f
+                 (lambda result
+                   (let* ([end (erlang:now)]
+                          [dur (- end start)])
+                     (when (> dur 20)
+                       (pretty-print `(time ,who ,dur ms)
+                         (trace-output-port))
+                       (newline (trace-output-port))
+                       (flush-output-port (trace-output-port))))
+                   (apply values result))))))]))
   )
