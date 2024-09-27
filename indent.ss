@@ -94,9 +94,9 @@
          )]))
 
   (define-token-predicates token-type-indexer
-    (token-open? lparen lbrack record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren)
+    (token-open? lparen lbrack record-brack vflnparen vflparen vfxnparen vfxparen vnparen vparen vu8nparen vu8paren vsnparen vsparen)
     (token-close? rparen rbrack)
-    (no-indent? lparen lbrack record-brack vfxnparen vfxparen vnparen vparen vu8nparen vu8paren rparen rbrack quote box)
+    (no-indent? lparen lbrack record-brack vflnparen vflparen vfxnparen vfxparen vnparen vparen vu8nparen vu8paren vsnparen vsparen rparen rbrack quote box)
     (simple-open? lparen lbrack)
     (simple-close? rparen rbrack)
     (atomic-or-quote? atomic quote))

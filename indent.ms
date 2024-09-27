@@ -164,7 +164,13 @@
          "2"
          "3"
          ")"))))
-   '("(" "#(" "#vu8(" "#vfx(" "#3vfx(" "#30vfx("))
+   (append
+    '("(" "#(" "#vu8(" "#vfx(" "#3vfx(" "#30vfx(")
+    (meta-cond
+     [(top-level-bound? 'flvector)
+      ;; introduced in Chez 10
+      '("#vfl(" "#vs(" "#30vs(")]
+     [else '()])))
   )
 
 (indent-mat data ()
@@ -221,6 +227,33 @@
     "'(alpha"
     "beta"
     "gamma)"))
+
+  (meta-cond
+   [(top-level-bound? 'flvector)
+    ;; introduced in Chez 10
+    (check-indent
+     (code
+      "#vfl(#x01 #x02 #x03"
+      "     #x04 #x05 #x06)")
+     (code
+      "#vfl(#x01 #x02 #x03"
+      "#x04 #x05 #x06)"))
+    (check-indent
+     (code
+      "#vs(#x01 #x02 #x03"
+      "    #x04 #x05 #x06)")
+     (code
+      "#vs(#x01 #x02 #x03"
+      "#x04 #x05 #x06)"))
+
+    (check-indent
+     (code
+      "#3vs(#x01 #x02 #x03"
+      "     #x04 #x05 #x06)")
+     (code
+      "#3vs(#x01 #x02 #x03"
+      "#x04 #x05 #x06)"))
+    ])
   )
 
 (indent-mat definitions ()
@@ -636,6 +669,42 @@
     "body"
     "...]"
     ")"))
+
+  (meta-cond
+   [(top-level-bound? 'flvector)
+    ;; introduced in Chez 10
+    (check-indent
+     (code
+      "(match x"
+      "  [#vfl(1 2 3)"
+      "   body"
+      "   ...]"
+      "  [#vs(1 2 3)"
+      "   body"
+      "   ...]"
+      "  [#3vs(1 2 3)"
+      "   body"
+      "   ...]"
+      "  [#30vs(1 2 3)"
+      "   body"
+      "   ...]"
+      "  )")
+     (code
+      "(match x"
+      "[#vfl(1 2 3)"
+      "body"
+      "...]"
+      "[#vs(1 2 3)"
+      "body"
+      "...]"
+      "[#3vs(1 2 3)"
+      "body"
+      "...]"
+      "[#30vs(1 2 3)"
+      "body"
+      "...]"
+      ")"))
+    ])
 
   (check-indent
    (code
@@ -1240,48 +1309,58 @@
            (equal? expected (map token-type actual)))
          (list type)
          text)]))
-   '(;; read-token
-     (atomic "symbol")
-     (atomic "#t")
-     (atomic "#f")
-     (atomic "123")
-     (atomic "#!eof")
-     (atomic "#\\newline")
-     (atomic "\"string\"")
-     (box "#&")
-     (dot ".")
-     (fasl "#@")
-     (insert "#0#")
-     (lbrack "[")
-     (lparen "(")
-     (mark "#0=")
-     (quote "#'")
-     (quote "#,")
-     (quote "#,@")
-     (quote "#;")
-     (quote "#`")
-     (quote "'")
-     (quote ",")
-     (quote ",@")
-     (quote "`")
-     (rbrack "]")
-     (record-brack "#[")
-     (rparen ")")
-     (vfxnparen "#2vfx(")
-     (vfxparen "#vfx(")
-     (vnparen "#2(")
-     (vparen "#(")
-     (vu8nparen "#2vu8(")
-     (vu8paren "#vu8(")
-     ;; extensions
-     (ws " ")
-     (ws "  ")
-     (ws "\t")
-     (eol "\n")
-     (line-comment ";")
-     (line-comment ";;")
-     (line-comment ";;;")
-     ))
+   (append
+    '(;; read-token
+      (atomic "symbol")
+      (atomic "#t")
+      (atomic "#f")
+      (atomic "123")
+      (atomic "#!eof")
+      (atomic "#\\newline")
+      (atomic "\"string\"")
+      (box "#&")
+      (dot ".")
+      (fasl "#@")
+      (insert "#0#")
+      (lbrack "[")
+      (lparen "(")
+      (mark "#0=")
+      (quote "#'")
+      (quote "#,")
+      (quote "#,@")
+      (quote "#;")
+      (quote "#`")
+      (quote "'")
+      (quote ",")
+      (quote ",@")
+      (quote "`")
+      (rbrack "]")
+      (record-brack "#[")
+      (rparen ")")
+      (vfxnparen "#2vfx(")
+      (vfxparen "#vfx(")
+      (vnparen "#2(")
+      (vparen "#(")
+      (vu8nparen "#2vu8(")
+      (vu8paren "#vu8(")
+      ;; extensions
+      (ws " ")
+      (ws "  ")
+      (ws "\t")
+      (eol "\n")
+      (line-comment ";")
+      (line-comment ";;")
+      (line-comment ";;;")
+      )
+    (meta-cond
+     [(top-level-bound? 'flvector)
+      ;; introduced in Chez 10
+      '((vflparen "#vfl(")
+        (vsnparen "#2vs(")
+        (vsparen "#vs(")
+        )]
+     [else '()])
+    ))
 
   (for-each
    (lambda (p)
