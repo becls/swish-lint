@@ -432,7 +432,10 @@ order by rank desc, count desc, candidates.name asc"
               [total-clients (length clients)]))
            (reply 'ok ($state copy [waketime 'infinity] [clients clients])))]
         [num-clients
-         (reply (length ($state clients)) state)]))
+         (reply (length ($state clients)) state)]
+        [shutdown-time
+         (let ([waketime ($state waketime)])
+           (reply (and (fixnum? waketime) waketime) state))]))
     (define (handle-cast msg state) (match msg))
     (define (handle-info msg state)
       (match msg
@@ -459,6 +462,9 @@ order by rank desc, count desc, candidates.name asc"
 
   (define (ui:num-clients)
     (gen-server:call 'ui 'num-clients))
+
+  (define (ui:shutdown-time)
+    (gen-server:call 'ui 'shutdown-time))
 
   (define (tower:running? port-number)
     (match (try
@@ -543,6 +549,7 @@ order by rank desc, count desc, candidates.name asc"
            (match (<request> path request)
              ["/"
               (let* ([num-clients (ui:num-clients)]
+                     [shutdown-time (and (zero? num-clients) (ui:shutdown-time))]
                      [limit (http:find-param "limit" params)]
                      [limit (and limit (string->number limit))]
                      [limit (or limit 20)])
@@ -563,6 +570,9 @@ order by rank desc, count desc, candidates.name asc"
                          (title ,(software-product-name)))
                         (body
                          (pre
+                          ,(when shutdown-time
+                             (format "Shut down in ~a seconds\n\n"
+                               (exact (ceiling (/ (- shutdown-time (erlang:now)) 1000.0)))))
                           ,(format "Connected clients: ~9:D\n" num-clients)
                           ,(format "         Keywords: ~9:D\n" keywords)
                           ,(format "      Definitions: ~9:D\n" defns)
