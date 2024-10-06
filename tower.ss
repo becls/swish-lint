@@ -169,6 +169,10 @@ substr(F.filename,-3)='.ss' desc, F.filename asc, D.line asc"
               [line (json:get msg '(params line))]
               [char (json:get msg '(params char))]
               [prefix (json:get msg '(params prefix))]
+              ;; when the identifier contains with a percent or
+              ;; underscore, we need to escape it using an uncommon
+              ;; character, like #\esc
+              [pat (string-append (pregexp-replace* "([_%])" prefix "\x1B;\\1") "%")]
               [root-fk (root-key)]
               [start (erlang:now)]
               [rows
@@ -181,16 +185,16 @@ select
   ,count(refs.name) as count
   ,candidates.name
 from
-(select keyword as name from keywords where keyword LIKE (?2 || '%')
+(select keyword as name from keywords where keyword like ?2 escape '\x1B;'
  union
  select name from refs
- where pre1=?1 and name LIKE (?2 || '%') and root_fk=?3
+ where pre1=?1 and name like ?2 escape '\x1B;' and root_fk=?3
 ) candidates
 left outer join refs
 on candidates.name = refs.name
 group by candidates.name
 order by rank desc, count desc, candidates.name asc"
-                     pre1 prefix root-fk file-fk line)))]
+                     pre1 pat root-fk file-fk line)))]
               [rows
                (match rows
                  [(#(,_ 1 ,@prefix) . ,rest) rest]

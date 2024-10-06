@@ -347,6 +347,20 @@
           [,_ (did-save uri "(let ([zyx 12]) (+ zyx 12))")]
           [("zyx") (extract-labels (get-completions uri 0 22))])
          'ok)
+        ;; Check that identifiers containing '%' and '_' do not
+        ;; confuse LIKE query.
+        (match-let*
+         ([,_ (did-save uri "(let ([%abc")]
+          [() (extract-labels (get-completions uri 0 11))]
+          [,_ (did-save uri "(let ([%abc 12]) (+ %a 12))")]
+          [("%abc") (extract-labels (get-completions uri 0 22))])
+         'ok)
+        (match-let*
+         ([,_ (did-save uri "(let ([_a%bc")]
+          [() (extract-labels (get-completions uri 0 11))]
+          [,_ (did-save uri "(let ([_a%bc 12]) (+ _a 12))")]
+          [("_a%bc") (extract-labels (get-completions uri 0 24))])
+         'ok)
         (did-close uri)
         'ok))))
 
