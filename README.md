@@ -15,13 +15,19 @@ Features include:
 - Find references
 - [Indentation](indentation.md)
 
-## Install
+## Build Requirements
 
-1. Download a pre-built binary from the
-[Releases](https://github.com/becls/swish-lint/releases) page and
-extract the files to `~/.emacs.d/swish-lint`.
+- [Swish](https://github.com/becls/swish) 2.6 or later built using Chez Scheme 9.6.4 or later
 
-2. Run `swish-lint --version` to verify that it starts properly.
+## Build
+
+1. `make`
+
+2. `make install`
+
+3. Add `~/.emacs.d/swish-lint` to your `PATH`
+
+4. Run `swish-lint --version` to verify that it starts properly.
 
 ### Configure Emacs
 
